@@ -13,13 +13,13 @@ constexpr uint8_t PIN_TFT_BACKLIGHT = 2;
 // Шина I2C 0: датчики подпола (Wire)
 // ============================================================================
 constexpr uint8_t PIN_I2C0_SDA = 21;
-constexpr uint8_t PIN_I2C0_SCL = 22;
+constexpr uint8_t PIN_I2C0_SCL = 18;
 
 // ============================================================================
 // Шина I2C 1: датчики улицы и дома (Wire1)
 // ============================================================================
-constexpr uint8_t PIN_I2C1_SDA = 32;
-constexpr uint8_t PIN_I2C1_SCL = 33;
+constexpr uint8_t PIN_I2C1_SDA = 47;
+constexpr uint8_t PIN_I2C1_SCL = 48;
 
 constexpr uint8_t SHT31_ADDR_A = 0x44;
 constexpr uint8_t SHT31_ADDR_B = 0x45;
@@ -28,7 +28,7 @@ constexpr uint32_t I2C_CLOCK_HZ = 100000;
 // ============================================================================
 // Реле (SSR)
 // ============================================================================
-constexpr uint8_t PIN_RELAY_SSR = 25;
+constexpr uint8_t PIN_RELAY_SSR = 17;
 constexpr bool RELAY_ACTIVE_HIGH = true;
 
 // ============================================================================

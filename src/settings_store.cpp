@@ -2,24 +2,21 @@
 
 #include <Preferences.h>
 #include <cstring>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 #include "config.h"
 
 namespace {
 Preferences g_prefs;
+SemaphoreHandle_t g_mutex = nullptr;
 constexpr const char* kNamespace = "humidino";
-}  // namespace
 
-namespace Settings {
-
-void begin() {
-    // begin()/end() вокруг каждого load/save ниже вместо удержания
-    // пространства имён открытым — Preferences не рассчитан на совместное
-    // использование из нескольких задач одновременно, а настройки
-    // читаются/пишутся редко.
+bool lockPrefs() {
+    return g_mutex != nullptr && xSemaphoreTake(g_mutex, portMAX_DELAY) == pdTRUE;
 }
 
-RuntimeSettings load() {
+RuntimeSettings loadUnlocked() {
     RuntimeSettings s;
     g_prefs.begin(kNamespace, true);
     s.rhTargetPercent = g_prefs.getFloat("rh_target", DEFAULT_RH_TARGET_PERCENT);
@@ -30,9 +27,24 @@ RuntimeSettings load() {
     g_prefs.end();
     return s;
 }
+}  // namespace
+
+namespace Settings {
+
+void begin() {
+    if (g_mutex == nullptr) g_mutex = xSemaphoreCreateMutex();
+}
+
+RuntimeSettings load() {
+    if (!lockPrefs()) return RuntimeSettings{};
+    RuntimeSettings s = loadUnlocked();
+    xSemaphoreGive(g_mutex);
+    return s;
+}
 
 void save(const RuntimeSettings& settings) {
-    RuntimeSettings current = load();
+    if (!lockPrefs()) return;
+    RuntimeSettings current = loadUnlocked();
 
     g_prefs.begin(kNamespace, false);
     if (current.rhTargetPercent != settings.rhTargetPercent)
@@ -46,10 +58,12 @@ void save(const RuntimeSettings& settings) {
     if (current.minPauseMs != settings.minPauseMs)
         g_prefs.putULong("min_pause_ms", settings.minPauseMs);
     g_prefs.end();
+    xSemaphoreGive(g_mutex);
 }
 
 NetConfig loadNet() {
     NetConfig n;
+    if (!lockPrefs()) return n;
     g_prefs.begin(kNamespace, true);
     g_prefs.getString("mqtt_host", n.mqttHost, sizeof(n.mqttHost));
     n.mqttPort = g_prefs.getUShort("mqtt_port", DEFAULT_MQTT_PORT);
@@ -58,10 +72,12 @@ NetConfig loadNet() {
     String topic = g_prefs.getString("mqtt_topic", DEFAULT_MQTT_BASE_TOPIC);
     strncpy(n.mqttBaseTopic, topic.c_str(), sizeof(n.mqttBaseTopic) - 1);
     g_prefs.end();
+    xSemaphoreGive(g_mutex);
     return n;
 }
 
 void saveNet(const NetConfig& net) {
+    if (!lockPrefs()) return;
     g_prefs.begin(kNamespace, false);
     g_prefs.putString("mqtt_host", net.mqttHost);
     g_prefs.putUShort("mqtt_port", net.mqttPort);
@@ -69,6 +85,7 @@ void saveNet(const NetConfig& net) {
     g_prefs.putString("mqtt_pass", net.mqttPass);
     g_prefs.putString("mqtt_topic", net.mqttBaseTopic);
     g_prefs.end();
+    xSemaphoreGive(g_mutex);
 }
 
 }  // namespace Settings

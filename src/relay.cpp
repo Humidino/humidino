@@ -17,11 +17,12 @@ void setRelayPin(bool on) {
 
 class RelayController {
 public:
-    void begin() {
+    void begin(uint32_t initialMinPauseMs) {
         pinMode(PIN_RELAY_SSR, OUTPUT);
         setRelayPin(false);
         status_ = RelayStatus{};
         status_.stateEnteredMs = millis();
+        status_.lastOffMs = status_.stateEnteredMs - initialMinPauseMs - 1;
     }
 
     void update(const SensorReading readings[4], const RuntimeSettings& cfg, uint32_t nowMs) {
@@ -32,45 +33,43 @@ public:
         bool sensorsHealthy = intake.valid && corner.valid && outside.valid &&
                                !intake.error && !corner.error && !outside.error;
 
-        // Если хоть один из обязательных датчиков нездоров: не вычисляем
-        // производные условия безопасности по устаревшим/мусорным данным —
-        // считаем это состоянием «безопасность не подтверждена» и уходим в
-        // ветку «не работать» ниже.
-        float crawlRh = max(intake.humidityPct, corner.humidityPct);
-        float crawlAbsMin = min(intake.absHumidityGm3, corner.absHumidityGm3);
-        bool condensationSafe = sensorsHealthy && (outside.absHumidityGm3 < crawlAbsMin);
-        bool freezeSafe = sensorsHealthy && (outside.temperatureC > cfg.freezeProtectC);
-
         RelayControlState next = status_.state;
 
-        if (status_.state == RelayControlState::Running) {
-            // Отключения по физической защите немедленно перекрывают
-            // минимальное время работы — оно защищает реле только от износа
-            // при частых включениях/выключениях и не является блокировкой
-            // по безопасности.
-            if (!freezeSafe) {
-                next = RelayControlState::LockedOutFreeze;
-            } else if (!condensationSafe) {
-                next = RelayControlState::LockedOutCondensation;
+        if (!sensorsHealthy) {
+            next = RelayControlState::LockedOutSensorFault;
+        } else {
+            float crawlRh = max(intake.humidityPct, corner.humidityPct);
+            float crawlAbsMin = min(intake.absHumidityGm3, corner.absHumidityGm3);
+            bool condensationSafe = outside.absHumidityGm3 < crawlAbsMin;
+            bool freezeSafe = outside.temperatureC > cfg.freezeProtectC;
+
+            if (status_.state == RelayControlState::Running) {
+                // Отключения по физической защите немедленно перекрывают
+                // минимальное время работы — оно защищает реле только от износа
+                // при частых включениях/выключениях и не является блокировкой
+                // по безопасности.
+                if (!freezeSafe) {
+                    next = RelayControlState::LockedOutFreeze;
+                } else if (!condensationSafe) {
+                    next = RelayControlState::LockedOutCondensation;
+                } else {
+                    bool minRuntimeElapsed = (nowMs - status_.stateEnteredMs) >= cfg.minRuntimeMs;
+                    bool belowHysteresis = crawlRh < (cfg.rhTargetPercent - cfg.hysteresisPercent);
+                    if (minRuntimeElapsed && belowHysteresis) {
+                        next = RelayControlState::Idle;
+                    }
+                }
             } else {
-                bool minRuntimeElapsed = (nowMs - status_.stateEnteredMs) >= cfg.minRuntimeMs;
-                bool belowHysteresis = crawlRh < (cfg.rhTargetPercent - cfg.hysteresisPercent);
-                if (minRuntimeElapsed && belowHysteresis) {
+                if (!freezeSafe) {
+                    next = RelayControlState::LockedOutFreeze;
+                } else if (!condensationSafe) {
+                    next = RelayControlState::LockedOutCondensation;
+                } else if (crawlRh > cfg.rhTargetPercent) {
+                    bool minPauseElapsed = (nowMs - status_.lastOffMs) > cfg.minPauseMs;
+                    next = minPauseElapsed ? RelayControlState::Running : RelayControlState::MinPauseHold;
+                } else {
                     next = RelayControlState::Idle;
                 }
-            }
-        } else {
-            if (!freezeSafe) {
-                next = RelayControlState::LockedOutFreeze;
-            } else if (!condensationSafe) {
-                next = RelayControlState::LockedOutCondensation;
-            } else if (!sensorsHealthy) {
-                next = RelayControlState::Idle;
-            } else if (crawlRh > cfg.rhTargetPercent) {
-                bool minPauseElapsed = (nowMs - status_.lastOffMs) > cfg.minPauseMs;
-                next = minPauseElapsed ? RelayControlState::Running : RelayControlState::MinPauseHold;
-            } else {
-                next = RelayControlState::Idle;
             }
         }
 
@@ -107,7 +106,7 @@ RelayController g_controller;
 
 void controlTask(void*) {
     Watchdog::registerCurrentTask();
-    g_controller.begin();
+    g_controller.begin(ShaState::getSettings().minPauseMs);
 
     for (;;) {
         SystemState snapshot;
@@ -140,6 +139,8 @@ const char* bannerText(RelayControlState state) {
             return "ЗАПРЕТ ПО КОНДЕНСАТУ";
         case RelayControlState::LockedOutFreeze:
             return "ЗАПРЕТ ПО МОРОЗУ";
+        case RelayControlState::LockedOutSensorFault:
+            return "ОШИБКА ДАТЧИКА";
     }
     return "?";
 }

@@ -30,7 +30,7 @@ bool recoverBus(TwoWire& bus, uint8_t sdaPin, uint8_t sclPin, uint32_t clockHz) 
     delayMicroseconds(5);
     digitalWrite(sclPin, HIGH);
     delayMicroseconds(5);
-    digitalWrite(sdaPin, HIGH);
+    pinMode(sdaPin, INPUT_PULLUP);
     delayMicroseconds(5);
 
     bool freed = (digitalRead(sdaPin) == HIGH);

@@ -6,10 +6,10 @@
 
 namespace WifiProvision {
 
-void begin() {
+bool begin() {
     WiFiManager wm;
     wm.setConfigPortalTimeout(180);
-    wm.autoConnect(DEVICE_HOSTNAME);
+    return wm.autoConnect(DEVICE_HOSTNAME);
 }
 
 }  // namespace WifiProvision

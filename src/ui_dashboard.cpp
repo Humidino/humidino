@@ -84,15 +84,21 @@ void formatUptime(char* out, size_t outSize, uint32_t ms) {
 void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r) {
     char buf[32];
 
-    snprintf(buf, sizeof(buf), "%.1f °C", r.temperatureC);
-    lv_label_set_text(w.temp, buf);
+    if (r.valid) {
+        snprintf(buf, sizeof(buf), "%.1f °C", r.temperatureC);
+        lv_label_set_text(w.temp, buf);
 
-    snprintf(buf, sizeof(buf), "%.1f %%", r.humidityPct);
-    lv_label_set_text(w.rh, buf);
+        snprintf(buf, sizeof(buf), "%.1f %%", r.humidityPct);
+        lv_label_set_text(w.rh, buf);
 
-    if (w.dew != nullptr) {
-        snprintf(buf, sizeof(buf), "Точка росы: %.1f °C", r.dewPointC);
-        lv_label_set_text(w.dew, buf);
+        if (w.dew != nullptr) {
+            snprintf(buf, sizeof(buf), "Точка росы: %.1f °C", r.dewPointC);
+            lv_label_set_text(w.dew, buf);
+        }
+    } else {
+        lv_label_set_text(w.temp, "--.- °C");
+        lv_label_set_text(w.rh, "--.- %");
+        if (w.dew != nullptr) lv_label_set_text(w.dew, "Точка росы: --.- °C");
     }
 
     lv_label_set_text(w.errBadge, r.error ? "ERR" : "");
@@ -104,6 +110,7 @@ lv_color_t bannerColorFor(RelayControlState state) {
             return lv_color_hex(0x2E8B45);  // зелёный
         case RelayControlState::LockedOutCondensation:
         case RelayControlState::LockedOutFreeze:
+        case RelayControlState::LockedOutSensorFault:
             return lv_color_hex(0xC97A1E);  // оранжевый
         case RelayControlState::Idle:
         case RelayControlState::MinPauseHold:

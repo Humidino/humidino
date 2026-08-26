@@ -13,9 +13,12 @@
 namespace {
 
 void netTask(void*) {
-    Watchdog::registerCurrentTask();
+    while (!WifiProvision::begin()) {
+        ShaState::updateWifi(false, 0);
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    }
 
-    WifiProvision::begin();  // блокирует только эту задачу до подключения/таймаута
+    Watchdog::registerCurrentTask();
     LocalWebServer::begin();
     Mqtt::begin();
 

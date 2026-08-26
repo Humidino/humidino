@@ -25,7 +25,8 @@ enum class RelayControlState : uint8_t {
     Running,
     LockedOutCondensation,
     LockedOutFreeze,
-    MinPauseHold
+    MinPauseHold,
+    LockedOutSensorFault
 };
 
 struct RelayStatus {

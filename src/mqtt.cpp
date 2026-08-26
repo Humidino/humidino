@@ -3,6 +3,8 @@
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
 #include <WiFi.h>
+#include <cerrno>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -26,6 +28,8 @@ uint32_t g_lastReconnectAttemptMs = 0;
 uint32_t g_lastPublishMs = 0;
 constexpr uint32_t kReconnectIntervalMs = 5000;
 constexpr uint32_t kPublishIntervalMs = 12000;
+constexpr uint16_t kSocketTimeoutS = WDT_TIMEOUT_S - 2;
+static_assert(kSocketTimeoutS > 0, "MQTT socket timeout must be positive");
 
 void buildTopics() {
     snprintf(g_topicState, sizeof(g_topicState), "%s/state", g_netCfg.mqttBaseTopic);
@@ -127,17 +131,27 @@ void onMessage(char* topic, uint8_t* payload, unsigned int len) {
     if (strncmp(topic, g_topicSetPrefix, strlen(g_topicSetPrefix)) != 0) return;
     const char* key = topic + strlen(g_topicSetPrefix);
 
+    enum class SettingKey { RhTarget, Hysteresis, Freeze };
+    SettingKey settingKey;
+    if (strcmp(key, "rh_target") == 0) settingKey = SettingKey::RhTarget;
+    else if (strcmp(key, "hysteresis_pct") == 0) settingKey = SettingKey::Hysteresis;
+    else if (strcmp(key, "freeze_c") == 0) settingKey = SettingKey::Freeze;
+    else return;
+
     char valueBuf[32];
-    unsigned int copyLen = len < sizeof(valueBuf) - 1 ? len : sizeof(valueBuf) - 1;
-    memcpy(valueBuf, payload, copyLen);
-    valueBuf[copyLen] = '\0';
-    float value = atof(valueBuf);
+    if (len == 0 || len >= sizeof(valueBuf)) return;
+    memcpy(valueBuf, payload, len);
+    valueBuf[len] = '\0';
+
+    errno = 0;
+    char* end = nullptr;
+    float value = strtof(valueBuf, &end);
+    if (errno == ERANGE || end == valueBuf || end != valueBuf + len || !std::isfinite(value)) return;
 
     RuntimeSettings settings = ShaState::getSettings();
-    if (strcmp(key, "rh_target") == 0) settings.rhTargetPercent = value;
-    else if (strcmp(key, "hysteresis_pct") == 0) settings.hysteresisPercent = value;
-    else if (strcmp(key, "freeze_c") == 0) settings.freezeProtectC = value;
-    else return;
+    if (settingKey == SettingKey::RhTarget) settings.rhTargetPercent = value;
+    else if (settingKey == SettingKey::Hysteresis) settings.hysteresisPercent = value;
+    else settings.freezeProtectC = value;
 
     ShaState::updateSettings(settings);
     Settings::save(settings);
@@ -187,6 +201,7 @@ void loop() {
         uint32_t now = millis();
         if (now - g_lastReconnectAttemptMs >= kReconnectIntervalMs) {
             g_lastReconnectAttemptMs = now;
+            g_mqtt.setSocketTimeout(kSocketTimeoutS);
             tryConnect();
         }
         return;

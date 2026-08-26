@@ -19,8 +19,8 @@ constexpr uint32_t kDrawBufLines = 40;  // 480*40*2 байта = ~38 КБ на �
 
 TFT_eSPI g_tft;
 lv_display_t* g_lvDisplay = nullptr;
-lv_color_t* g_buf1 = nullptr;
-lv_color_t* g_buf2 = nullptr;
+uint8_t* g_buf1 = nullptr;
+uint8_t* g_buf2 = nullptr;
 
 uint32_t lvTickGetCb() { return millis(); }
 
@@ -36,20 +36,38 @@ void flushCb(lv_display_t* disp, const lv_area_t* area, uint8_t* pxMap) {
     lv_display_flush_ready(disp);
 }
 
-void initLvglBuffers() {
+bool initLvglBuffers() {
     size_t bufSizePx = static_cast<size_t>(kScreenWidth) * kDrawBufLines;
-    size_t bufSizeBytes = bufSizePx * sizeof(lv_color_t);
+    size_t bufSizeBytes = bufSizePx * LV_COLOR_FORMAT_GET_SIZE(LV_COLOR_FORMAT_RGB565);
 
-    g_buf1 = static_cast<lv_color_t*>(heap_caps_malloc(bufSizeBytes, MALLOC_CAP_SPIRAM));
-    g_buf2 = static_cast<lv_color_t*>(heap_caps_malloc(bufSizeBytes, MALLOC_CAP_SPIRAM));
+    g_buf1 = static_cast<uint8_t*>(heap_caps_malloc(bufSizeBytes, MALLOC_CAP_SPIRAM));
+    g_buf2 = static_cast<uint8_t*>(heap_caps_malloc(bufSizeBytes, MALLOC_CAP_SPIRAM));
+    if (g_buf1 == nullptr || g_buf2 == nullptr) {
+        heap_caps_free(g_buf1);
+        heap_caps_free(g_buf2);
+        g_buf1 = static_cast<uint8_t*>(
+            heap_caps_malloc(bufSizeBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        g_buf2 = static_cast<uint8_t*>(
+            heap_caps_malloc(bufSizeBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
+
+    if (g_buf1 == nullptr || g_buf2 == nullptr) {
+        heap_caps_free(g_buf1);
+        heap_caps_free(g_buf2);
+        g_buf1 = nullptr;
+        g_buf2 = nullptr;
+        return false;
+    }
 
     lv_display_set_buffers(g_lvDisplay, g_buf1, g_buf2, bufSizeBytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    return true;
 }
 
 void lvglTask(void*) {
     Watchdog::registerCurrentTask();
 
     g_tft.init();
+    g_tft.setSwapBytes(true);
     g_tft.setRotation(1);  // альбомная ориентация; подправить на стенде, если панель выйдет зеркальной/повёрнутой
     g_tft.fillScreen(TFT_BLACK);
 
@@ -60,7 +78,13 @@ void lvglTask(void*) {
     g_lvDisplay = lv_display_create(kScreenWidth, kScreenHeight);
     lv_display_set_flush_cb(g_lvDisplay, flushCb);
     lv_display_set_color_format(g_lvDisplay, LV_COLOR_FORMAT_RGB565);
-    initLvglBuffers();
+    if (!initLvglBuffers()) {
+        Serial.println("LVGL: unable to allocate display buffers");
+        for (;;) {
+            Watchdog::feed();
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
 
     UiDashboard::build();
     lv_timer_create([](lv_timer_t*) { UiDashboard::update(); }, 500, nullptr);
