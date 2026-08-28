@@ -21,8 +21,10 @@ struct ZonePanelWidgets {
 lv_obj_t* g_uptimeLabel;
 lv_obj_t* g_wifiLabel;
 lv_obj_t* g_ramLabel;
+lv_obj_t* g_modeLabel;
 lv_obj_t* g_banner;
 lv_obj_t* g_bannerLabel;
+lv_obj_t* g_spinner;  // видна и крутится только пока реле включено — см. update()
 ZonePanelWidgets g_panels[static_cast<size_t>(SensorId::Count)];
 
 const char* kZoneTitles[] = {
@@ -148,6 +150,11 @@ void build() {
     lv_obj_set_style_text_font(g_ramLabel, &font_ru_14, 0);
     lv_label_set_text(g_ramLabel, "ОЗУ: --");
 
+    g_modeLabel = lv_label_create(statusBar);
+    lv_obj_set_style_text_font(g_modeLabel, &font_ru_14, 0);
+    lv_obj_set_style_text_color(g_modeLabel, lv_color_hex(0x8AA0B8), 0);
+    lv_label_set_text(g_modeLabel, "АВТО");
+
     // --- Сетка зон 2x2 ---
     static int32_t colDsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static int32_t rowDsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
@@ -173,6 +180,12 @@ void build() {
     lv_obj_set_size(g_banner, LV_PCT(100), 56);
     lv_obj_set_flex_align(g_banner, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_flex_flow(g_banner, LV_FLEX_FLOW_ROW);
+
+    g_spinner = lv_spinner_create(g_banner);
+    lv_obj_set_size(g_spinner, 32, 32);
+    lv_spinner_set_anim_params(g_spinner, 1000, 200);  // оборот в секунду — визуально читается как "вращается"
+    lv_obj_set_style_arc_color(g_spinner, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
+    lv_obj_add_flag(g_spinner, LV_OBJ_FLAG_HIDDEN);  // виден только пока реле включено, см. update()
 
     g_bannerLabel = lv_label_create(g_banner);
     lv_obj_set_style_text_font(g_bannerLabel, &font_ru_28_bold, 0);
@@ -202,8 +215,16 @@ void update() {
     snprintf(buf, sizeof(buf), "ОЗУ: %u КБ", static_cast<unsigned>(freeHeap / 1024));
     lv_label_set_text(g_ramLabel, buf);
 
+    lv_label_set_text(g_modeLabel, Relay::modeBadgeText(snapshot.settings.mode));
+
     lv_label_set_text(g_bannerLabel, Relay::bannerText(snapshot.relay.state));
     lv_obj_set_style_bg_color(g_banner, bannerColorFor(snapshot.relay.state), 0);
+
+    if (snapshot.relay.relayOn) {
+        lv_obj_clear_flag(g_spinner, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(g_spinner, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 }  // namespace UiDashboard

@@ -5,33 +5,158 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Humidino</title>
 <style>
-  body { font-family: sans-serif; background:#101418; color:#e8e8e8; margin:0; padding:16px; }
-  h1 { font-size:20px; margin:0 0 12px; }
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
-  .card { background:#1b2128; border-radius:8px; padding:10px; }
-  .card h2 { font-size:13px; margin:0 0 6px; color:#9aa5b1; font-weight:normal; }
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1b2128; --border: #2a323c;
+    --text: #e8e8e8; --muted: #8aa0b8; --accent: #2e8b45; --accent2: #3a7dd6;
+    --warn: #c97a1e; --err: #e04040;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--text); margin:0; padding:16px; max-width:720px; margin-inline:auto; }
+  h1 { font-size:20px; margin:0 0 16px; display:flex; align-items:center; gap:8px; }
+  h1 .dot { width:8px; height:8px; border-radius:50%; background:var(--muted); }
+  h1 .dot.online { background:var(--accent); }
+  section { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:14px; }
+  section h2 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 12px; font-weight:600; }
+
+  /* --- Баннер статуса + анимированный вентилятор --- */
+  #statusCard { display:flex; align-items:center; gap:16px; padding:18px; border-radius:12px; transition:background .3s; }
+  #fanIcon { width:56px; height:56px; flex-shrink:0; }
+  #fanIcon svg { width:100%; height:100%; }
+  #fanIcon.spinning svg { animation: spin 1.1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #statusText { flex:1; }
+  #bannerLabel { font-size:20px; font-weight:700; margin-bottom:2px; }
+  #modeBadge { font-size:12px; color:rgba(255,255,255,.75); text-transform:uppercase; letter-spacing:.03em; }
+
+  /* --- Переключатель режима --- */
+  .mode-switch { display:flex; gap:6px; }
+  .mode-switch button { flex:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer; font-size:13px; }
+  .mode-switch button.active { background:var(--accent2); border-color:var(--accent2); color:white; font-weight:600; }
+
+  /* --- Зоны --- */
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .card { background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px; }
+  .card h3 { font-size:13px; margin:0 0 6px; color:var(--muted); font-weight:normal; }
   .card .val { font-size:18px; }
-  .err { color:#e04040; font-weight:bold; }
-  #banner { text-align:center; padding:14px; border-radius:8px; font-size:20px; font-weight:bold; margin-bottom:16px; }
-  form label { display:block; margin:8px 0 4px; font-size:13px; color:#9aa5b1; }
-  form input { width:100%; box-sizing:border-box; padding:6px; border-radius:4px; border:1px solid #333; background:#1b2128; color:#eee; }
-  button { margin-top:12px; padding:8px 16px; border:none; border-radius:6px; background:#2e8b45; color:white; cursor:pointer; }
+  .err { color:var(--err); font-weight:bold; }
+
+  /* --- Пресеты --- */
+  .preset-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); }
+  .preset-row:last-child { border-bottom:none; }
+  .preset-row .name { flex:1; font-size:14px; }
+  .preset-row button { padding:6px 10px; font-size:12px; border-radius:6px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer; }
+  .preset-row button.apply { border-color:var(--accent2); color:var(--accent2); }
+  .preset-row button.delete { border-color:var(--err); color:var(--err); }
+  #presetEmpty { color:var(--muted); font-size:13px; padding:6px 0; }
+
+  /* --- Формы --- */
+  form label { display:block; margin:10px 0 4px; font-size:13px; color:var(--muted); }
+  form input { width:100%; box-sizing:border-box; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  button[type=submit], .btn-primary { margin-top:14px; padding:10px 18px; border:none; border-radius:8px; background:var(--accent); color:white; cursor:pointer; font-size:14px; font-weight:600; }
+  .btn-secondary { margin-top:14px; margin-left:8px; padding:10px 18px; border:1px solid var(--border); border-radius:8px; background:var(--panel2); color:var(--text); cursor:pointer; font-size:14px; }
+  .hint { font-size:12px; color:var(--muted); margin-top:6px; }
+  .saved-flash { font-size:12px; color:var(--accent); margin-left:10px; opacity:0; transition:opacity .2s; }
+  .saved-flash.show { opacity:1; }
 </style>
 </head>
 <body>
-<h1>Humidino — контроль подпола</h1>
-<div id="banner">—</div>
-<div class="grid" id="zones"></div>
+<h1><span class="dot" id="wifiDot"></span>Humidino — контроль подпола</h1>
 
-<form id="settingsForm">
-  <label>Порог влажности подпола, % (rh_target)</label>
-  <input type="number" step="0.1" id="rh_target">
-  <label>Гистерезис, % (hysteresis_pct)</label>
-  <input type="number" step="0.1" id="hysteresis_pct">
-  <label>Защита от замерзания, °C (freeze_c)</label>
-  <input type="number" step="0.1" id="freeze_c">
-  <button type="submit">Сохранить</button>
-</form>
+<section>
+  <div id="statusCard">
+    <div id="fanIcon">
+      <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="50" r="6" fill="white"/>
+        <g fill="white" opacity="0.9">
+          <path d="M50 50 C50 20, 30 8, 14 14 C22 30, 34 46, 50 50 Z"/>
+          <path d="M50 50 C80 50, 92 30, 86 14 C70 22, 54 34, 50 50 Z"/>
+          <path d="M50 50 C50 80, 70 92, 86 86 C78 70, 66 54, 50 50 Z"/>
+          <path d="M50 50 C20 50, 8 70, 14 86 C30 78, 46 66, 50 50 Z"/>
+        </g>
+      </svg>
+    </div>
+    <div id="statusText">
+      <div id="bannerLabel">—</div>
+      <div id="modeBadge">АВТО</div>
+    </div>
+  </div>
+  <div class="mode-switch" style="margin-top:14px;">
+    <button data-mode="auto">Авто</button>
+    <button data-mode="manual_on">Вкл</button>
+    <button data-mode="manual_off">Выкл</button>
+  </div>
+</section>
+
+<section>
+  <h2>Зоны</h2>
+  <div class="grid" id="zones"></div>
+</section>
+
+<section>
+  <h2>Пресеты порогов</h2>
+  <div id="presetList"><div id="presetEmpty">Пока нет сохранённых пресетов</div></div>
+  <button class="btn-primary" id="saveAsPresetBtn" type="button">Сохранить текущие настройки как пресет…</button>
+</section>
+
+<section>
+  <h2>Пороги и тайминги</h2>
+  <form id="settingsForm">
+    <div class="row2">
+      <div>
+        <label>Порог влажности подпола, %</label>
+        <input type="number" step="0.1" id="rh_target">
+      </div>
+      <div>
+        <label>Гистерезис, %</label>
+        <input type="number" step="0.1" id="hysteresis_pct">
+      </div>
+    </div>
+    <label>Защита от замерзания, °C</label>
+    <input type="number" step="0.1" id="freeze_c">
+    <div class="row2">
+      <div>
+        <label>Мин. время работы, мин</label>
+        <input type="number" step="1" min="0" id="min_runtime_min">
+      </div>
+      <div>
+        <label>Мин. пауза между включениями, мин</label>
+        <input type="number" step="1" min="0" id="min_pause_min">
+      </div>
+    </div>
+    <button type="submit">Сохранить<span class="saved-flash" id="settingsSaved">✓ сохранено</span></button>
+  </form>
+</section>
+
+<section>
+  <h2>Сеть / MQTT</h2>
+  <form id="networkForm">
+    <div class="row2">
+      <div>
+        <label>Адрес брокера MQTT</label>
+        <input type="text" id="mqtt_host" placeholder="например, 192.168.1.10">
+      </div>
+      <div>
+        <label>Порт</label>
+        <input type="number" id="mqtt_port" placeholder="1883">
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label>Пользователь</label>
+        <input type="text" id="mqtt_user" autocomplete="off">
+      </div>
+      <div>
+        <label>Пароль</label>
+        <input type="password" id="mqtt_pass" autocomplete="new-password" placeholder="оставьте пустым, чтобы не менять">
+      </div>
+    </div>
+    <label>Базовый топик</label>
+    <input type="text" id="mqtt_topic" placeholder="humidino">
+    <div class="hint" id="mqttPassHint"></div>
+    <button type="submit">Сохранить<span class="saved-flash" id="networkSaved">✓ применено</span></button>
+  </form>
+</section>
 
 <script>
 const zoneNames = {
@@ -40,16 +165,37 @@ const zoneNames = {
   outside: "Улица",
   house: "Дом",
 };
-const bannerText = {0:"ОЖИДАНИЕ",1:"РАБОТА",2:"ЗАПРЕТ ПО КОНДЕНСАТУ",3:"ЗАПРЕТ ПО МОРОЗУ",4:"ОЖИДАНИЕ"};
-const bannerColor = {0:"#3a4a5a",1:"#2e8b45",2:"#c97a1e",3:"#c97a1e",4:"#3a4a5a"};
+const bannerText = {
+  idle: "ОЖИДАНИЕ", running: "РАБОТА",
+  locked_condensation: "ЗАПРЕТ ПО КОНДЕНСАТУ", locked_freeze: "ЗАПРЕТ ПО МОРОЗУ",
+  min_pause_hold: "ОЖИДАНИЕ", locked_sensor_fault: "ОШИБКА ДАТЧИКА",
+};
+const bannerColor = {
+  idle: "#2a3542", running: "#1f5c33",
+  locked_condensation: "#5c4319", locked_freeze: "#5c4319",
+  min_pause_hold: "#2a3542", locked_sensor_fault: "#5c1f1f",
+};
+const modeText = { auto: "АВТО", manual_on: "РУЧНОЕ ВКЛ", manual_off: "РУЧНОЕ ВЫКЛ" };
+
+let currentMode = "auto";
+let mqttPassSet = false;
+
+function fmtMinRuntime(ms) { return Math.round(ms / 60000); }
 
 async function refreshState() {
   try {
     const r = await fetch('/api/state');
     const s = await r.json();
-    const banner = document.getElementById('banner');
-    banner.textContent = bannerText[s.relay.state] ?? '?';
-    banner.style.background = bannerColor[s.relay.state] ?? '#333';
+
+    document.getElementById('wifiDot').classList.toggle('online', s.wifi_rssi !== undefined && s.wifi_rssi !== 0);
+
+    const stateKey = s.relay.state_str || 'idle';
+    document.getElementById('bannerLabel').textContent = bannerText[stateKey] ?? '?';
+    document.getElementById('statusCard').style.background = bannerColor[stateKey] ?? '#2a3542';
+
+    const fan = document.getElementById('fanIcon');
+    fan.classList.toggle('spinning', !!s.relay.on);
+    fan.style.opacity = s.relay.on ? '1' : '.35';
 
     const zonesEl = document.getElementById('zones');
     zonesEl.innerHTML = '';
@@ -57,7 +203,7 @@ async function refreshState() {
       const z = s.zones[key];
       const div = document.createElement('div');
       div.className = 'card';
-      let html = `<h2>${zoneNames[key]}</h2><div class="val">${z.temp_c.toFixed(1)}°C / ${z.rh_pct.toFixed(1)}%</div>`;
+      let html = `<h3>${zoneNames[key]}</h3><div class="val">${z.temp_c.toFixed(1)}°C / ${z.rh_pct.toFixed(1)}%</div>`;
       if (z.dew_c !== undefined) html += `<div>Точка росы: ${z.dew_c.toFixed(1)}°C</div>`;
       if (z.error) html += `<div class="err">ERR</div>`;
       div.innerHTML = html;
@@ -66,12 +212,41 @@ async function refreshState() {
   } catch (e) { /* временный сбой — повторится на следующем тике */ }
 }
 
+function setModeButtons(mode) {
+  currentMode = mode;
+  document.getElementById('modeBadge').textContent = modeText[mode] ?? mode;
+  document.querySelectorAll('.mode-switch button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+}
+
+async function setMode(mode) {
+  setModeButtons(mode);  // мгновенный отклик, не дожидаясь ответа сервера
+  await fetch('/api/settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode }),
+  });
+}
+
+document.querySelectorAll('.mode-switch button').forEach(btn => {
+  btn.addEventListener('click', () => setMode(btn.dataset.mode));
+});
+
 async function loadSettings() {
   const r = await fetch('/api/settings');
   const s = await r.json();
   document.getElementById('rh_target').value = s.rh_target;
   document.getElementById('hysteresis_pct').value = s.hysteresis_pct;
   document.getElementById('freeze_c').value = s.freeze_c;
+  document.getElementById('min_runtime_min').value = fmtMinRuntime(s.min_runtime_ms);
+  document.getElementById('min_pause_min').value = fmtMinRuntime(s.min_pause_ms);
+  setModeButtons(s.mode || 'auto');
+}
+
+function flash(id) {
+  const el = document.getElementById(id);
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1500);
 }
 
 document.getElementById('settingsForm').addEventListener('submit', async (ev) => {
@@ -80,12 +255,96 @@ document.getElementById('settingsForm').addEventListener('submit', async (ev) =>
     rh_target: parseFloat(document.getElementById('rh_target').value),
     hysteresis_pct: parseFloat(document.getElementById('hysteresis_pct').value),
     freeze_c: parseFloat(document.getElementById('freeze_c').value),
+    min_runtime_ms: Math.round(parseFloat(document.getElementById('min_runtime_min').value) * 60000),
+    min_pause_ms: Math.round(parseFloat(document.getElementById('min_pause_min').value) * 60000),
   };
   await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  flash('settingsSaved');
+});
+
+// --- Пресеты ---
+async function loadPresets() {
+  const r = await fetch('/api/presets');
+  const presets = await r.json();
+  const list = document.getElementById('presetList');
+  const empty = document.getElementById('presetEmpty');
+  list.querySelectorAll('.preset-row').forEach(el => el.remove());
+  if (presets.length === 0) {
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  for (const p of presets) {
+    const row = document.createElement('div');
+    row.className = 'preset-row';
+    row.innerHTML = `<span class="name">${p.name}</span>
+      <span style="color:var(--muted); font-size:12px;">${p.rh_target}% / гист. ${p.hysteresis_pct}%</span>
+      <button class="apply" type="button">Применить</button>
+      <button class="delete" type="button">Удалить</button>`;
+    row.querySelector('.apply').addEventListener('click', async () => {
+      await fetch('/api/presets/apply', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name: p.name }) });
+      loadSettings();
+    });
+    row.querySelector('.delete').addEventListener('click', async () => {
+      const updated = presets.filter(x => x.name !== p.name);
+      await fetch('/api/presets', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(updated) });
+      loadPresets();
+    });
+    list.appendChild(row);
+  }
+}
+
+document.getElementById('saveAsPresetBtn').addEventListener('click', async () => {
+  const name = prompt('Название пресета:');
+  if (!name) return;
+  const r = await fetch('/api/presets');
+  const presets = (await r.json()).filter(p => p.name !== name);
+  presets.push({
+    name,
+    rh_target: parseFloat(document.getElementById('rh_target').value),
+    hysteresis_pct: parseFloat(document.getElementById('hysteresis_pct').value),
+    freeze_c: parseFloat(document.getElementById('freeze_c').value),
+    min_runtime_ms: Math.round(parseFloat(document.getElementById('min_runtime_min').value) * 60000),
+    min_pause_ms: Math.round(parseFloat(document.getElementById('min_pause_min').value) * 60000),
+  });
+  await fetch('/api/presets', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(presets) });
+  loadPresets();
+});
+
+// --- Сеть / MQTT ---
+async function loadNetwork() {
+  const r = await fetch('/api/network');
+  const n = await r.json();
+  document.getElementById('mqtt_host').value = n.mqtt_host || '';
+  document.getElementById('mqtt_port').value = n.mqtt_port || 1883;
+  document.getElementById('mqtt_user').value = n.mqtt_user || '';
+  document.getElementById('mqtt_topic').value = n.mqtt_topic || 'humidino';
+  mqttPassSet = !!n.mqtt_pass_set;
+  document.getElementById('mqttPassHint').textContent = mqttPassSet
+    ? 'Пароль уже сохранён на устройстве. Поле оставлено пустым намеренно — заполните, только если хотите его сменить.'
+    : 'Пароль не задан.';
+}
+
+document.getElementById('networkForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const body = {
+    mqtt_host: document.getElementById('mqtt_host').value,
+    mqtt_port: parseInt(document.getElementById('mqtt_port').value || '1883', 10),
+    mqtt_user: document.getElementById('mqtt_user').value,
+    mqtt_topic: document.getElementById('mqtt_topic').value,
+  };
+  const pass = document.getElementById('mqtt_pass').value;
+  if (pass) body.mqtt_pass = pass;
+  await fetch('/api/network', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  document.getElementById('mqtt_pass').value = '';
+  flash('networkSaved');
+  loadNetwork();
 });
 
 refreshState();
 loadSettings();
+loadPresets();
+loadNetwork();
 setInterval(refreshState, 3000);
 </script>
 </body>
