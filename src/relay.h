@@ -18,4 +18,9 @@ void begin();
 // ожидание, у MinPauseHold просто известна причина).
 const char* bannerText(RelayControlState state);
 
+// Бейдж режима управления (АВТО/РУЧНОЕ ВКЛ/РУЧНОЕ ВЫКЛ) — отдельно от
+// bannerText, т.к. экран без тачскрина показывает и режим, и текущий статус
+// одновременно (переключить режим можно только из веб-интерфейса).
+const char* modeBadgeText(OperatingMode mode);
+
 }  // namespace Relay

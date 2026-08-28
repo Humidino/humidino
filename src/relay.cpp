@@ -33,15 +33,35 @@ public:
         bool sensorsHealthy = intake.valid && corner.valid && outside.valid &&
                                !intake.error && !corner.error && !outside.error;
 
+        // Заморозка — единственная защита, которая действует безусловно даже
+        // в ручных режимах (физическая безопасность конструкции важнее любой
+        // команды пользователя). Без исправных датчиков её проверить нельзя,
+        // поэтому при неисправности считаем условие небезопасным.
+        bool freezeSafe = sensorsHealthy && (outside.temperatureC > cfg.freezeProtectC);
+
         RelayControlState next = status_.state;
 
-        if (!sensorsHealthy) {
+        if (cfg.mode == OperatingMode::ManualOff) {
+            // Прямая команда пользователя — выключаем немедленно, не дожидаясь
+            // min-runtime (это не автоматический цикл, а явный запрос "выкл").
+            next = RelayControlState::Idle;
+        } else if (cfg.mode == OperatingMode::ManualOn) {
+            if (!sensorsHealthy) {
+                next = RelayControlState::LockedOutSensorFault;
+            } else if (!freezeSafe) {
+                next = RelayControlState::LockedOutFreeze;
+            } else {
+                // Защита от конденсата и порог влажности намеренно
+                // игнорируются в ручном режиме — пользователь явно просит
+                // работать, min-pause тоже не действует (это не автоцикл).
+                next = RelayControlState::Running;
+            }
+        } else if (!sensorsHealthy) {
             next = RelayControlState::LockedOutSensorFault;
         } else {
             float crawlRh = max(intake.humidityPct, corner.humidityPct);
             float crawlAbsMin = min(intake.absHumidityGm3, corner.absHumidityGm3);
             bool condensationSafe = outside.absHumidityGm3 < crawlAbsMin;
-            bool freezeSafe = outside.temperatureC > cfg.freezeProtectC;
 
             if (status_.state == RelayControlState::Running) {
                 // Отключения по физической защите немедленно перекрывают
@@ -143,6 +163,18 @@ const char* bannerText(RelayControlState state) {
             return "ОШИБКА ДАТЧИКА";
     }
     return "?";
+}
+
+const char* modeBadgeText(OperatingMode mode) {
+    switch (mode) {
+        case OperatingMode::ManualOn:
+            return "РУЧНОЕ ВКЛ";
+        case OperatingMode::ManualOff:
+            return "РУЧНОЕ ВЫКЛ";
+        case OperatingMode::Auto:
+        default:
+            return "АВТО";
+    }
 }
 
 }  // namespace Relay

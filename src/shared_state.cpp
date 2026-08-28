@@ -1,5 +1,6 @@
 #include "shared_state.h"
 
+#include <cstring>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -8,6 +9,43 @@ SystemState g_state;
 SemaphoreHandle_t g_mutex = nullptr;
 constexpr TickType_t kLockTimeout = pdMS_TO_TICKS(50);
 }  // namespace
+
+const char* toString(OperatingMode mode) {
+    switch (mode) {
+        case OperatingMode::ManualOn:
+            return "manual_on";
+        case OperatingMode::ManualOff:
+            return "manual_off";
+        case OperatingMode::Auto:
+        default:
+            return "auto";
+    }
+}
+
+OperatingMode operatingModeFromString(const char* s) {
+    if (s == nullptr) return OperatingMode::Auto;
+    if (strcmp(s, "manual_on") == 0) return OperatingMode::ManualOn;
+    if (strcmp(s, "manual_off") == 0) return OperatingMode::ManualOff;
+    return OperatingMode::Auto;
+}
+
+const char* toString(RelayControlState state) {
+    switch (state) {
+        case RelayControlState::Running:
+            return "running";
+        case RelayControlState::LockedOutCondensation:
+            return "locked_condensation";
+        case RelayControlState::LockedOutFreeze:
+            return "locked_freeze";
+        case RelayControlState::MinPauseHold:
+            return "min_pause_hold";
+        case RelayControlState::LockedOutSensorFault:
+            return "locked_sensor_fault";
+        case RelayControlState::Idle:
+        default:
+            return "idle";
+    }
+}
 
 namespace ShaState {
 

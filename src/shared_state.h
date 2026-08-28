@@ -29,6 +29,22 @@ enum class RelayControlState : uint8_t {
     LockedOutSensorFault
 };
 
+// Режим управления вентиляцией, выбирается пользователем (веб-интерфейс —
+// экран платы без тачскрина, только отображает текущий режим).
+enum class OperatingMode : uint8_t {
+    Auto,       // текущий алгоритм по порогам влажности/точки росы
+    ManualOn,   // принудительно включено (защита по морозу всё равно активна)
+    ManualOff,  // принудительно выключено
+};
+
+const char* toString(OperatingMode mode);
+// Возвращает Auto, если строка не распознана — безопасное умолчание.
+OperatingMode operatingModeFromString(const char* s);
+
+// Стабильный машиночитаемый идентификатор состояния реле (для JSON-API —
+// человекочитаемый текст на русском см. Relay::bannerText в relay.h).
+const char* toString(RelayControlState state);
+
 struct RelayStatus {
     RelayControlState state = RelayControlState::Idle;
     bool relayOn = false;
@@ -43,6 +59,7 @@ struct RuntimeSettings {
     float freezeProtectC = FREEZE_PROTECT_TEMP_C;
     uint32_t minRuntimeMs = MIN_RUNTIME_MS;
     uint32_t minPauseMs = MIN_PAUSE_MS;
+    OperatingMode mode = OperatingMode::Auto;
 };
 
 struct SystemState {

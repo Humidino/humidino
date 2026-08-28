@@ -770,7 +770,7 @@
 
 #define LV_USE_ANIMIMG    0
 
-#define LV_USE_ARC        0
+#define LV_USE_ARC        1
 
 #define LV_USE_ARCLABEL  0
 
@@ -842,7 +842,7 @@
 
 #define LV_USE_SPINBOX    0
 
-#define LV_USE_SPINNER    0
+#define LV_USE_SPINNER    1
 
 #define LV_USE_SWITCH     0
 

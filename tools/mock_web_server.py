@@ -3,8 +3,10 @@
 Локальный мок-сервер для веб-интерфейса Humidino.
 
 Отдаёт data/index.html и имитирует REST API прошивки (/api/state,
-/api/settings) со случайными, но правдоподобными данными — позволяет
-открыть и потестировать веб-интерфейс в браузере без реального ESP32.
+/api/settings, /api/presets, /api/network) со случайными, но правдоподобными
+данными — позволяет открыть и потестировать веб-интерфейс в браузере без
+реального ESP32: анимацию вентилятора, переключение режимов, пресеты,
+форму настроек сети/MQTT.
 
 Использование:
     python tools/mock_web_server.py [порт]
@@ -25,9 +27,13 @@ from pathlib import Path
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 START_TIME = time.time()
 
-# Состояния реле совпадают с enum RelayControlState в shared_state.h:
-# 0=Idle, 1=Running, 2=LockedOutCondensation, 3=LockedOutFreeze, 4=MinPauseHold
-RELAY_STATE_CYCLE = [0, 1, 2, 3, 4]
+# Строковые идентификаторы совпадают с ShaState::toString(RelayControlState)
+# в shared_state.cpp. Цикл нужен только для демонстрации — на реальном
+# устройстве состояние определяется алгоритмом, а не таймером.
+RELAY_STATE_CYCLE = [
+    "idle", "running", "locked_condensation", "locked_freeze",
+    "min_pause_hold", "locked_sensor_fault",
+]
 STATE_HOLD_SECONDS = 8  # держим каждое состояние N секунд, чтобы увидеть все баннеры
 
 settings = {
@@ -36,6 +42,22 @@ settings = {
     "freeze_c": 2.0,
     "min_runtime_ms": 10 * 60 * 1000,
     "min_pause_ms": 15 * 60 * 1000,
+    "mode": "auto",
+}
+
+presets = [
+    {"name": "Лето", "rh_target": 65.0, "hysteresis_pct": 5.0, "freeze_c": 2.0,
+     "min_runtime_ms": 10 * 60 * 1000, "min_pause_ms": 15 * 60 * 1000},
+    {"name": "Зима", "rh_target": 75.0, "hysteresis_pct": 5.0, "freeze_c": 3.0,
+     "min_runtime_ms": 15 * 60 * 1000, "min_pause_ms": 20 * 60 * 1000},
+]
+
+network = {
+    "mqtt_host": "",
+    "mqtt_port": 1883,
+    "mqtt_user": "",
+    "mqtt_pass": "",
+    "mqtt_topic": "humidino",
 }
 
 
@@ -53,20 +75,30 @@ def fake_zone(base_temp, base_rh, with_dew, error=False):
 
 def build_state():
     elapsed = time.time() - START_TIME
-    relay_state = RELAY_STATE_CYCLE[int(elapsed // STATE_HOLD_SECONDS) % len(RELAY_STATE_CYCLE)]
+    state_str = RELAY_STATE_CYCLE[int(elapsed // STATE_HOLD_SECONDS) % len(RELAY_STATE_CYCLE)]
     wobble = math.sin(elapsed / 5.0) * 3
 
     return {
         "uptime_s": int(elapsed),
         "wifi_rssi": -55 + int(wobble),
         "free_heap": 210000 + random.randint(-5000, 5000),
-        "relay": {"on": relay_state == 1, "state": relay_state},
+        "relay": {"on": state_str == "running", "state_str": state_str},
         "zones": {
             "crawl_intake": fake_zone(18 + wobble * 0.2, 74, True),
             "crawl_corner": fake_zone(17.5 + wobble * 0.2, 76, True),
             "outside": fake_zone(9 + wobble, 55, False),
             "house": fake_zone(21, 48, False, error=(int(elapsed) % 30 < 3)),
         },
+    }
+
+
+def network_public():
+    return {
+        "mqtt_host": network["mqtt_host"],
+        "mqtt_port": network["mqtt_port"],
+        "mqtt_user": network["mqtt_user"],
+        "mqtt_topic": network["mqtt_topic"],
+        "mqtt_pass_set": bool(network["mqtt_pass"]),
     }
 
 
@@ -82,24 +114,59 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _read_json(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+        try:
+            return json.loads(body)
+        except json.JSONDecodeError:
+            return None
+
     def do_GET(self):
         if self.path == "/api/state":
             self._send_json(build_state())
         elif self.path == "/api/settings":
             self._send_json(settings)
+        elif self.path == "/api/presets":
+            self._send_json(presets)
+        elif self.path == "/api/network":
+            self._send_json(network_public())
         else:
             super().do_GET()
 
     def do_POST(self):
         if self.path == "/api/settings":
-            length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length)
-            try:
-                incoming = json.loads(body)
-            except json.JSONDecodeError:
-                incoming = {}
+            incoming = self._read_json() or {}
             settings.update({k: v for k, v in incoming.items() if k in settings})
             self._send_json(settings)
+        elif self.path == "/api/presets/apply":
+            incoming = self._read_json() or {}
+            name = incoming.get("name")
+            preset = next((p for p in presets if p["name"] == name), None)
+            if preset is None:
+                self._send_json({"error": "preset not found"}, status=404)
+                return
+            for key in ("rh_target", "hysteresis_pct", "freeze_c", "min_runtime_ms", "min_pause_ms"):
+                settings[key] = preset[key]
+            self._send_json(settings)
+        elif self.path == "/api/network":
+            incoming = self._read_json() or {}
+            for key in ("mqtt_host", "mqtt_port", "mqtt_user", "mqtt_topic"):
+                if key in incoming:
+                    network[key] = incoming[key]
+            if incoming.get("mqtt_pass"):
+                network["mqtt_pass"] = incoming["mqtt_pass"]
+            self._send_json(network_public())
+        else:
+            self.send_error(404)
+
+    def do_PUT(self):
+        if self.path == "/api/presets":
+            global presets
+            incoming = self._read_json()
+            if isinstance(incoming, list):
+                presets = incoming
+            self._send_json(presets)
         else:
             self.send_error(404)
 

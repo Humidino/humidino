@@ -193,6 +193,17 @@ void begin() {
     g_mqtt.setBufferSize(768);  // пейлоады discovery крупнее 256 байт по умолчанию
 }
 
+void reconfigure() {
+    if (g_mqtt.connected()) {
+        // Публикуем LWT-подобное "offline" явно — обычный disconnect() не
+        // рассылает Will, а брокер должен сразу видеть смену конфигурации.
+        g_mqtt.publish(g_topicAvailability, "offline", true);
+        g_mqtt.disconnect();
+    }
+    g_lastReconnectAttemptMs = 0;  // разрешаем немедленную попытку подключения с новыми настройками
+    begin();
+}
+
 void loop() {
     if (strlen(g_netCfg.mqttHost) == 0) return;
     if (WiFi.status() != WL_CONNECTED) return;

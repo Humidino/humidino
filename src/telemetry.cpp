@@ -16,7 +16,8 @@ void buildStateJson(JsonDocument& doc) {
 
     JsonObject relay = doc["relay"].to<JsonObject>();
     relay["on"] = s.relay.relayOn;
-    relay["state"] = static_cast<int>(s.relay.state);
+    relay["state"] = static_cast<int>(s.relay.state);      // числовой код, для обратной совместимости
+    relay["state_str"] = toString(s.relay.state);           // машиночитаемый id, напр. "locked_freeze"
 
     static const char* kKeys[] = {"crawl_intake", "crawl_corner", "outside", "house"};
     JsonObject zones = doc["zones"].to<JsonObject>();
@@ -40,6 +41,7 @@ void buildSettingsJson(JsonDocument& doc) {
     doc["freeze_c"] = settings.freezeProtectC;
     doc["min_runtime_ms"] = settings.minRuntimeMs;
     doc["min_pause_ms"] = settings.minPauseMs;
+    doc["mode"] = toString(settings.mode);
 }
 
 }  // namespace Telemetry

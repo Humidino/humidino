@@ -9,4 +9,9 @@ namespace Mqtt {
 void begin();
 void loop();
 
+// Перечитывает сетевые настройки из NVS и переподключается с ними —
+// вызывается из web_server.cpp после сохранения новых настроек MQTT/сети,
+// чтобы не требовать перезагрузки устройства.
+void reconfigure();
+
 }  // namespace Mqtt
