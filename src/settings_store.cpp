@@ -76,6 +76,7 @@ NetConfig loadNet() {
     g_prefs.getString("mqtt_pass", n.mqttPass, sizeof(n.mqttPass));
     String topic = g_prefs.getString("mqtt_topic", DEFAULT_MQTT_BASE_TOPIC);
     strncpy(n.mqttBaseTopic, topic.c_str(), sizeof(n.mqttBaseTopic) - 1);
+    g_prefs.getString("web_pass", n.webPassword, sizeof(n.webPassword));
     g_prefs.end();
     xSemaphoreGive(g_mutex);
     return n;
@@ -89,6 +90,7 @@ void saveNet(const NetConfig& net) {
     g_prefs.putString("mqtt_user", net.mqttUser);
     g_prefs.putString("mqtt_pass", net.mqttPass);
     g_prefs.putString("mqtt_topic", net.mqttBaseTopic);
+    g_prefs.putString("web_pass", net.webPassword);
     g_prefs.end();
     xSemaphoreGive(g_mutex);
 }
