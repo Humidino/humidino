@@ -89,9 +89,9 @@ def build_state():
         "relay": {"on": state_str == "running", "state_str": state_str},
         "zones": {
             "crawl_intake": fake_zone(18 + wobble * 0.2, 74, True),
+            "crawl_middle": fake_zone(17.8 + wobble * 0.2, 75, True, error=(int(elapsed) % 30 < 3)),
             "crawl_corner": fake_zone(17.5 + wobble * 0.2, 76, True),
             "outside": fake_zone(9 + wobble, 55, False),
-            "house": fake_zone(21, 48, False, error=(int(elapsed) % 30 < 3)),
         },
     }
 

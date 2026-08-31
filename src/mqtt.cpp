@@ -54,6 +54,12 @@ const DiscoveryEntity kEntities[] = {
      "{{ value_json.zones.crawl_intake.rh_pct }}", false},
     {"crawl_intake_dew", "Crawlspace Intake Dew Point", "°C", "temperature",
      "{{ value_json.zones.crawl_intake.dew_c }}", false},
+    {"crawl_middle_temp", "Crawlspace Middle Temperature", "°C", "temperature",
+     "{{ value_json.zones.crawl_middle.temp_c }}", false},
+    {"crawl_middle_rh", "Crawlspace Middle Humidity", "%", "humidity",
+     "{{ value_json.zones.crawl_middle.rh_pct }}", false},
+    {"crawl_middle_dew", "Crawlspace Middle Dew Point", "°C", "temperature",
+     "{{ value_json.zones.crawl_middle.dew_c }}", false},
     {"crawl_corner_temp", "Crawlspace Corner Temperature", "°C", "temperature",
      "{{ value_json.zones.crawl_corner.temp_c }}", false},
     {"crawl_corner_rh", "Crawlspace Corner Humidity", "%", "humidity",
@@ -62,8 +68,6 @@ const DiscoveryEntity kEntities[] = {
      "{{ value_json.zones.crawl_corner.dew_c }}", false},
     {"outside_temp", "Outside Temperature", "°C", "temperature", "{{ value_json.zones.outside.temp_c }}", false},
     {"outside_rh", "Outside Humidity", "%", "humidity", "{{ value_json.zones.outside.rh_pct }}", false},
-    {"house_temp", "House Temperature", "°C", "temperature", "{{ value_json.zones.house.temp_c }}", false},
-    {"house_rh", "House Humidity", "%", "humidity", "{{ value_json.zones.house.rh_pct }}", false},
     {"wifi_rssi", "WiFi RSSI", "dBm", "signal_strength", "{{ value_json.wifi_rssi }}", false},
     {"free_heap", "Free Heap", "B", nullptr, "{{ value_json.free_heap }}", false},
 };
@@ -120,10 +124,19 @@ void publishFanDiscovery() {
     g_mqtt.publish(topic, payload.c_str(), true);
 }
 
+// Датчик "Дом" убран из схемы (заменён третьей зоной подпола) — чистим его
+// retained discovery-конфиги, оставшиеся в брокере от прежних прошивок,
+// иначе в Home Assistant повиснут недоступные сущности.
+void clearLegacyHouseDiscovery() {
+    g_mqtt.publish("homeassistant/sensor/humidino_house_temp/config", "", true);
+    g_mqtt.publish("homeassistant/sensor/humidino_house_rh/config", "", true);
+}
+
 void publishDiscovery() {
     for (size_t i = 0; i < kEntityCount; i++) {
         publishDiscoveryEntity(kEntities[i]);
     }
+    clearLegacyHouseDiscovery();
     publishFanDiscovery();
 }
 
