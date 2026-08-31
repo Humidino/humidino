@@ -69,6 +69,11 @@ constexpr size_t kSensorCount = sizeof(g_sensors) / sizeof(g_sensors[0]);
 void initBuses() {
     Wire.begin(PIN_I2C0_SDA, PIN_I2C0_SCL, I2C_CLOCK_HZ);
     Wire1.begin(PIN_I2C1_SDA, PIN_I2C1_SCL, I2C_CLOCK_HZ);
+    // Явный таймаут транзакции: без него отключённый/безподтяжечный датчик
+    // может подвесить шину на неопределённое время и уронить sensorTask по
+    // watchdog раньше, чем сработает штатное восстановление шины ниже.
+    Wire.setTimeOut(I2C_TRANSACTION_TIMEOUT_MS);
+    Wire1.setTimeOut(I2C_TRANSACTION_TIMEOUT_MS);
     for (auto& ctx : g_sensors) {
         ctx.sht.begin(ctx.addr);
     }
@@ -134,8 +139,12 @@ void sensorTask(void*) {
     for (;;) {
         for (auto& ctx : g_sensors) {
             pollOneSensor(ctx);
+            // Кормим watchdog после каждого датчика, а не только в конце
+            // прохода по всем четырём — иначе время ожидания зависшего/
+            // отключённого датчика на одной шине суммируется с остальными и
+            // может выбить WDT_TIMEOUT_S раньше, чем найдётся виновник.
+            Watchdog::feed();
         }
-        Watchdog::feed();
         vTaskDelay(pdMS_TO_TICKS(SENSOR_POLL_INTERVAL_MS));
     }
 }
