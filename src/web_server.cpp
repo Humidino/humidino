@@ -8,7 +8,7 @@
 #include <esp_random.h>
 
 #include "config.h"
-#include "mqtt.h"
+#include "settings_actions.h"
 #include "settings_store.h"
 #include "shared_state.h"
 #include "telemetry.h"
@@ -92,8 +92,7 @@ void begin() {
             if (body["min_pause_ms"].is<uint32_t>()) settings.minPauseMs = body["min_pause_ms"];
             if (body["mode"].is<const char*>()) settings.mode = operatingModeFromString(body["mode"]);
 
-            ShaState::updateSettings(settings);
-            Settings::save(settings);
+            SettingsActions::applyRuntimeSettings(settings);
 
             JsonDocument resp;
             Telemetry::buildSettingsJson(resp);
@@ -143,28 +142,11 @@ void begin() {
         "/api/presets/apply", [](AsyncWebServerRequest* req, JsonVariant& json) {
             if (!requireAuthentication(req)) return;
             const char* name = json["name"] | "";
-            std::vector<Settings::Preset> presets = Settings::loadPresets();
-            const Settings::Preset* found = nullptr;
-            for (const auto& p : presets) {
-                if (strcmp(p.name, name) == 0) {
-                    found = &p;
-                    break;
-                }
-            }
-            if (found == nullptr) {
+            RuntimeSettings settings;
+            if (!SettingsActions::applyPresetByName(name, settings)) {
                 req->send(404, "application/json", "{\"error\":\"preset not found\"}");
                 return;
             }
-
-            RuntimeSettings settings = ShaState::getSettings();
-            settings.rhTargetPercent = found->values.rhTargetPercent;
-            settings.hysteresisPercent = found->values.hysteresisPercent;
-            settings.freezeProtectC = found->values.freezeProtectC;
-            settings.minRuntimeMs = found->values.minRuntimeMs;
-            settings.minPauseMs = found->values.minPauseMs;
-
-            ShaState::updateSettings(settings);
-            Settings::save(settings);
 
             JsonDocument resp;
             Telemetry::buildSettingsJson(resp);
@@ -207,8 +189,7 @@ void begin() {
             if (body["mqtt_topic"].is<const char*>())
                 strncpy(net.mqttBaseTopic, body["mqtt_topic"].as<const char*>(), sizeof(net.mqttBaseTopic) - 1);
 
-            Settings::saveNet(net);
-            Mqtt::reconfigure();
+            SettingsActions::saveNetworkConfig(net);
 
             JsonDocument resp;
             resp["mqtt_host"] = net.mqttHost;

@@ -7,6 +7,7 @@
 #include "config.h"
 #include "fonts/fonts.h"
 #include "relay.h"
+#include "settings_actions.h"
 #include "shared_state.h"
 
 namespace {
@@ -25,7 +26,35 @@ lv_obj_t* g_modeLabel;
 lv_obj_t* g_banner;
 lv_obj_t* g_bannerLabel;
 lv_obj_t* g_spinner;  // видна и крутится только пока реле включено — см. update()
+lv_obj_t* g_modeButtons[3];  // Авто/Вкл/Выкл, индекс соответствует OperatingMode
 ZonePanelWidgets g_panels[static_cast<size_t>(SensorId::Count)];
+
+// Меняет только режим, остальные пороги/тайминги оставляет как есть —
+// то же самое, что делает POST /api/settings с одним полем "mode" из
+// веб-интерфейса (см. web_server.cpp).
+void setMode(OperatingMode mode) {
+    RuntimeSettings settings = ShaState::getSettings();
+    if (settings.mode == mode) return;
+    settings.mode = mode;
+    SettingsActions::applyRuntimeSettings(settings);
+}
+
+void onModeAutoClicked(lv_event_t*) { setMode(OperatingMode::Auto); }
+void onModeOnClicked(lv_event_t*) { setMode(OperatingMode::ManualOn); }
+void onModeOffClicked(lv_event_t*) { setMode(OperatingMode::ManualOff); }
+
+lv_obj_t* buildModeButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb) {
+    lv_obj_t* btn = lv_button_create(parent);
+    lv_obj_set_flex_grow(btn, 1);
+    lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* label = lv_label_create(btn);
+    lv_obj_set_style_text_font(label, &font_ru_14, 0);
+    lv_label_set_text(label, text);
+    lv_obj_center(label);
+
+    return btn;
+}
 
 const char* kZoneTitles[] = {
     "Приточка подпола",
@@ -125,8 +154,8 @@ lv_color_t bannerColorFor(RelayControlState state) {
 
 namespace UiDashboard {
 
-void build() {
-    lv_obj_t* scr = lv_screen_active();
+void build(lv_obj_t* parent) {
+    lv_obj_t* scr = parent;
     lv_obj_set_flex_flow(scr, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x101418), 0);
     lv_obj_set_style_pad_all(scr, 4, 0);
@@ -155,12 +184,32 @@ void build() {
     lv_obj_set_style_text_color(g_modeLabel, lv_color_hex(0x8AA0B8), 0);
     lv_label_set_text(g_modeLabel, "АВТО");
 
+    // --- Кнопки переключения режима (дублируют веб-интерфейс) ---
+    lv_obj_t* modeRow = lv_obj_create(scr);
+    lv_obj_set_size(modeRow, LV_PCT(100), 34);
+    lv_obj_set_flex_flow(modeRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(modeRow, 4, 0);
+    lv_obj_set_style_pad_all(modeRow, 0, 0);
+    lv_obj_set_style_border_width(modeRow, 0, 0);
+
+    g_modeButtons[static_cast<size_t>(OperatingMode::Auto)] =
+        buildModeButton(modeRow, "АВТО", onModeAutoClicked);
+    g_modeButtons[static_cast<size_t>(OperatingMode::ManualOn)] =
+        buildModeButton(modeRow, "ВКЛ", onModeOnClicked);
+    g_modeButtons[static_cast<size_t>(OperatingMode::ManualOff)] =
+        buildModeButton(modeRow, "ВЫКЛ", onModeOffClicked);
+
     // --- Сетка зон 2x2 ---
     static int32_t colDsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static int32_t rowDsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
 
     lv_obj_t* grid = lv_obj_create(scr);
-    lv_obj_set_size(grid, LV_PCT(100), LV_PCT(70));
+    lv_obj_set_width(grid, LV_PCT(100));
+    // flex-grow вместо фиксированного процента высоты: строка режима теперь
+    // делит экран вместе с баннером и статус-баром, а доступная высота
+    // родителя зависит от того, в каком контейнере лежит дашборд (вкладка
+    // tabview или весь экран) — пусть сетка просто займёт всё, что осталось.
+    lv_obj_set_flex_grow(grid, 1);
     lv_obj_set_grid_dsc_array(grid, colDsc, rowDsc);
     lv_obj_set_style_pad_all(grid, 2, 0);
     lv_obj_set_style_pad_gap(grid, 4, 0);
@@ -216,6 +265,12 @@ void update() {
     lv_label_set_text(g_ramLabel, buf);
 
     lv_label_set_text(g_modeLabel, Relay::modeBadgeText(snapshot.settings.mode));
+
+    for (size_t i = 0; i < 3; i++) {
+        bool active = (i == static_cast<size_t>(snapshot.settings.mode));
+        lv_obj_set_style_bg_color(g_modeButtons[i],
+                                   active ? lv_color_hex(0x2E6DA4) : lv_color_hex(0x3A4048), 0);
+    }
 
     lv_label_set_text(g_bannerLabel, Relay::bannerText(snapshot.relay.state));
     lv_obj_set_style_bg_color(g_banner, bannerColorFor(snapshot.relay.state), 0);
