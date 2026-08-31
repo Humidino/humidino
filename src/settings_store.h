@@ -21,6 +21,7 @@ struct NetConfig {
     char mqttUser[32] = "";
     char mqttPass[32] = "";
     char mqttBaseTopic[32] = "humidino";
+    char webPassword[33] = "";
 };
 
 NetConfig loadNet();

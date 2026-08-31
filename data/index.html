@@ -277,19 +277,35 @@ async function loadPresets() {
   for (const p of presets) {
     const row = document.createElement('div');
     row.className = 'preset-row';
-    row.innerHTML = `<span class="name">${p.name}</span>
-      <span style="color:var(--muted); font-size:12px;">${p.rh_target}% / гист. ${p.hysteresis_pct}%</span>
-      <button class="apply" type="button">Применить</button>
-      <button class="delete" type="button">Удалить</button>`;
-    row.querySelector('.apply').addEventListener('click', async () => {
+
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = p.name;
+
+    const values = document.createElement('span');
+    values.style.cssText = 'color:var(--muted); font-size:12px;';
+    values.textContent = `${p.rh_target}% / гист. ${p.hysteresis_pct}%`;
+
+    const apply = document.createElement('button');
+    apply.className = 'apply';
+    apply.type = 'button';
+    apply.textContent = 'Применить';
+    apply.addEventListener('click', async () => {
       await fetch('/api/presets/apply', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name: p.name }) });
       loadSettings();
     });
-    row.querySelector('.delete').addEventListener('click', async () => {
+
+    const remove = document.createElement('button');
+    remove.className = 'delete';
+    remove.type = 'button';
+    remove.textContent = 'Удалить';
+    remove.addEventListener('click', async () => {
       const updated = presets.filter(x => x.name !== p.name);
       await fetch('/api/presets', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(updated) });
       loadPresets();
     });
+
+    row.append(name, values, apply, remove);
     list.appendChild(row);
   }
 }
