@@ -21,6 +21,7 @@ struct NetConfig {
     char mqttUser[32] = "";
     char mqttPass[32] = "";
     char mqttBaseTopic[32] = "humidino";
+    char webPassword[33] = "";
 };
 
 NetConfig loadNet();
@@ -49,5 +50,13 @@ std::vector<Preset> loadPresets();
 // присылает весь актуальный список при любом добавлении/удалении/переименовании).
 // Список обрезается до kMaxPresets записей.
 void savePresets(const std::vector<Preset>& presets);
+
+// Калибровка тачскрина (5 значений uint16_t из TFT_eSPI::calibrateTouch()).
+// Пишется один раз при первом включении (см. display.cpp) и переживает
+// перезагрузки — интерактивная калибровка больше не повторяется, пока NVS
+// не очищен.
+constexpr size_t kTouchCalibrationValues = 5;
+bool loadTouchCalibration(uint16_t out[kTouchCalibrationValues]);
+void saveTouchCalibration(const uint16_t data[kTouchCalibrationValues]);
 
 }  // namespace Settings

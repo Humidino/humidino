@@ -76,6 +76,7 @@ NetConfig loadNet() {
     g_prefs.getString("mqtt_pass", n.mqttPass, sizeof(n.mqttPass));
     String topic = g_prefs.getString("mqtt_topic", DEFAULT_MQTT_BASE_TOPIC);
     strncpy(n.mqttBaseTopic, topic.c_str(), sizeof(n.mqttBaseTopic) - 1);
+    g_prefs.getString("web_pass", n.webPassword, sizeof(n.webPassword));
     g_prefs.end();
     xSemaphoreGive(g_mutex);
     return n;
@@ -89,6 +90,7 @@ void saveNet(const NetConfig& net) {
     g_prefs.putString("mqtt_user", net.mqttUser);
     g_prefs.putString("mqtt_pass", net.mqttPass);
     g_prefs.putString("mqtt_topic", net.mqttBaseTopic);
+    g_prefs.putString("web_pass", net.webPassword);
     g_prefs.end();
     xSemaphoreGive(g_mutex);
 }
@@ -142,6 +144,24 @@ void savePresets(const std::vector<Preset>& presets) {
     if (!lockPrefs()) return;
     g_prefs.begin(kNamespace, false);
     g_prefs.putString("presets_json", json);
+    g_prefs.end();
+    xSemaphoreGive(g_mutex);
+}
+
+bool loadTouchCalibration(uint16_t out[kTouchCalibrationValues]) {
+    if (!lockPrefs()) return false;
+    g_prefs.begin(kNamespace, true);
+    size_t expected = kTouchCalibrationValues * sizeof(uint16_t);
+    size_t got = g_prefs.getBytes("touch_cal", out, expected);
+    g_prefs.end();
+    xSemaphoreGive(g_mutex);
+    return got == expected;
+}
+
+void saveTouchCalibration(const uint16_t data[kTouchCalibrationValues]) {
+    if (!lockPrefs()) return;
+    g_prefs.begin(kNamespace, false);
+    g_prefs.putBytes("touch_cal", data, kTouchCalibrationValues * sizeof(uint16_t));
     g_prefs.end();
     xSemaphoreGive(g_mutex);
 }
