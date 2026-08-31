@@ -15,7 +15,7 @@ namespace {
 struct ZonePanelWidgets {
     lv_obj_t* temp;
     lv_obj_t* rh;
-    lv_obj_t* dew;      // nullptr для зон без точки росы (Улица/Дом)
+    lv_obj_t* dew;      // nullptr для зон без точки росы (Улица)
     lv_obj_t* errBadge;
 };
 
@@ -58,13 +58,13 @@ lv_obj_t* buildModeButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb) 
 
 const char* kZoneTitles[] = {
     "Приточка подпола",
+    "Середина подпола",
     "Дальний угол подпола",
     "Улица",
-    "Дом",
 };
 
 bool zoneHasDewPoint(SensorId id) {
-    return id == SensorId::CrawlspaceIntake || id == SensorId::CrawlspaceCorner;
+    return id != SensorId::Outside;
 }
 
 ZonePanelWidgets buildZonePanel(lv_obj_t* parent, const char* title, bool showDewPoint) {

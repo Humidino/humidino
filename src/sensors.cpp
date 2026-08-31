@@ -62,7 +62,7 @@ SensorContext g_sensors[] = {
     {SensorId::CrawlspaceIntake, Adafruit_SHT31(&Wire), &Wire, SHT31_ADDR_A, PIN_I2C0_SDA, PIN_I2C0_SCL},
     {SensorId::CrawlspaceCorner, Adafruit_SHT31(&Wire), &Wire, SHT31_ADDR_B, PIN_I2C0_SDA, PIN_I2C0_SCL},
     {SensorId::Outside,          Adafruit_SHT31(&Wire1), &Wire1, SHT31_ADDR_A, PIN_I2C1_SDA, PIN_I2C1_SCL},
-    {SensorId::House,            Adafruit_SHT31(&Wire1), &Wire1, SHT31_ADDR_B, PIN_I2C1_SDA, PIN_I2C1_SCL},
+    {SensorId::CrawlspaceMiddle, Adafruit_SHT31(&Wire1), &Wire1, SHT31_ADDR_B, PIN_I2C1_SDA, PIN_I2C1_SCL},
 };
 constexpr size_t kSensorCount = sizeof(g_sensors) / sizeof(g_sensors[0]);
 
