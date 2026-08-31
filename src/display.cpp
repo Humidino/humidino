@@ -105,7 +105,7 @@ void lvglTask(void*) {
 namespace Display {
 
 void begin() {
-    xTaskCreatePinnedToCore(lvglTask, "lvglTask", 8192, nullptr, 2, nullptr, 1);
+    xTaskCreatePinnedToCore(lvglTask, "lvglTask", 16384, nullptr, 2, nullptr, 1);
 }
 
 }  // namespace Display

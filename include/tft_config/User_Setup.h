@@ -29,5 +29,11 @@
 #define SPI_FREQUENCY       40000000
 #define SPI_READ_FREQUENCY  20000000
 
-// Явный выбор порта SPI, чтобы SPI дисплея не конфликтовал с периферией I2C.
-#define USE_HSPI_PORT
+// USE_HSPI_PORT не используем. По умолчанию (без флага) TFT_eSPI на ESP32-S3
+// берёт SPI_PORT = FSPI, а макрос FSPI в esp32-hal-spi.h для не-classic-ESP32
+// чипов равен 1 — но REG_SPI_BASE(i) в soc.h валиден только при i>=2, иначе
+// возвращает 0, и SPI_USER_REG(1) == 0x10 → StoreProhibited при первой же
+// записи в "регистр" в begin_tft_write(). USE_FSPI_PORT задаёт SPI_PORT
+// напрямую как физический индекс 2 (реальный SPI2), это валидный адрес и
+// не конфликтует с периферией I2C (у неё свой блок).
+#define USE_FSPI_PORT
