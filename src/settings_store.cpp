@@ -148,4 +148,22 @@ void savePresets(const std::vector<Preset>& presets) {
     xSemaphoreGive(g_mutex);
 }
 
+bool loadTouchCalibration(uint16_t out[kTouchCalibrationValues]) {
+    if (!lockPrefs()) return false;
+    g_prefs.begin(kNamespace, true);
+    size_t expected = kTouchCalibrationValues * sizeof(uint16_t);
+    size_t got = g_prefs.getBytes("touch_cal", out, expected);
+    g_prefs.end();
+    xSemaphoreGive(g_mutex);
+    return got == expected;
+}
+
+void saveTouchCalibration(const uint16_t data[kTouchCalibrationValues]) {
+    if (!lockPrefs()) return;
+    g_prefs.begin(kNamespace, false);
+    g_prefs.putBytes("touch_cal", data, kTouchCalibrationValues * sizeof(uint16_t));
+    g_prefs.end();
+    xSemaphoreGive(g_mutex);
+}
+
 }  // namespace Settings
