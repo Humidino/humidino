@@ -124,10 +124,19 @@ void publishFanDiscovery() {
     g_mqtt.publish(topic, payload.c_str(), true);
 }
 
+// Датчик "Дом" убран из схемы (заменён третьей зоной подпола) — чистим его
+// retained discovery-конфиги, оставшиеся в брокере от прежних прошивок,
+// иначе в Home Assistant повиснут недоступные сущности.
+void clearLegacyHouseDiscovery() {
+    g_mqtt.publish("homeassistant/sensor/humidino_house_temp/config", "", true);
+    g_mqtt.publish("homeassistant/sensor/humidino_house_rh/config", "", true);
+}
+
 void publishDiscovery() {
     for (size_t i = 0; i < kEntityCount; i++) {
         publishDiscoveryEntity(kEntities[i]);
     }
+    clearLegacyHouseDiscovery();
     publishFanDiscovery();
 }
 
