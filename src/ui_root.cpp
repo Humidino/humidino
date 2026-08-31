@@ -15,6 +15,7 @@ enum TabIndex { kTabMain = 0, kTabSettings, kTabPresets, kTabNetwork, kTabCount 
 
 lv_obj_t* g_tabs[kTabCount];
 lv_obj_t* g_navButtons[kTabCount];
+int g_activeTab = -1;
 
 // Настройки/Пресеты/Сеть — это формы редактирования, а не живая телеметрия:
 // их поля перечитываются из NVS/SharedState только при переключении на
@@ -22,6 +23,9 @@ lv_obj_t* g_navButtons[kTabCount];
 // затереть то, что пользователь ещё не успел сохранить, посреди набора
 // текста или числа.
 void showTab(int idx) {
+    if (idx == g_activeTab) return;
+    g_activeTab = idx;
+
     for (int i = 0; i < kTabCount; i++) {
         if (i == idx) {
             lv_obj_clear_flag(g_tabs[i], LV_OBJ_FLAG_HIDDEN);

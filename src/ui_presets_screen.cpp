@@ -143,7 +143,7 @@ void onNameSaveClicked(lv_event_t*) {
             lv_label_set_text(g_nameError, "Достигнут лимит пресетов (8)");
             return;
         }
-        Settings::Preset preset;
+        Settings::Preset preset{};
         strncpy(preset.name, name, sizeof(preset.name) - 1);
         preset.values = values;
         g_cachedPresets.push_back(preset);

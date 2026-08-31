@@ -132,11 +132,11 @@ void build(lv_obj_t* parent) {
     lv_label_set_text(title, "Пороги и тайминги осушения");
 
     // Влажность 0.0-100.0 %, шаг 0.5 %
-    g_spinboxes[kRhTarget] = buildRow(parent, "Целевая влажность подпола, %", 4, 1, 0, 1000, 5);
+    g_spinboxes[kRhTarget] = buildRow(parent, "Целевая влажность подпола, %", 4, 3, 0, 1000, 5);
     // Гистерезис 0.0-50.0 %, шаг 0.5 %
-    g_spinboxes[kHysteresis] = buildRow(parent, "Гистерезис, %", 4, 1, 0, 500, 5);
+    g_spinboxes[kHysteresis] = buildRow(parent, "Гистерезис, %", 4, 3, 0, 500, 5);
     // Защита от замерзания -20.0..40.0 °C, шаг 0.5 °C
-    g_spinboxes[kFreezeC] = buildRow(parent, "Защита от замерзания, °C", 4, 1, -200, 400, 5);
+    g_spinboxes[kFreezeC] = buildRow(parent, "Защита от замерзания, °C", 4, 3, -200, 400, 5);
     // Мин. время работы/паузы, целые минуты 0-180
     g_spinboxes[kMinRuntimeMin] = buildRow(parent, "Мин. время работы, мин", 3, 0, 0, 180, 1);
     g_spinboxes[kMinPauseMin] = buildRow(parent, "Мин. пауза, мин", 3, 0, 0, 180, 1);

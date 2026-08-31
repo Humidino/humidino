@@ -13,6 +13,7 @@ namespace {
 
 lv_obj_t* g_hostField;
 lv_obj_t* g_portField;
+lv_obj_t* g_portError;
 lv_obj_t* g_userField;
 lv_obj_t* g_passField;
 lv_obj_t* g_passHint;
@@ -60,10 +61,13 @@ void onSaveClicked(lv_event_t*) {
     strncpy(net.mqttHost, host, sizeof(net.mqttHost) - 1);
 
     const char* portText = lv_textarea_get_text(g_portField);
-    if (portText != nullptr && strlen(portText) > 0) {
-        long parsed = strtol(portText, nullptr, 10);
-        if (parsed > 0 && parsed <= 65535) net.mqttPort = static_cast<uint16_t>(parsed);
+    long parsed = portText != nullptr ? strtol(portText, nullptr, 10) : 0;
+    if (parsed <= 0 || parsed > 65535) {
+        lv_label_set_text(g_portError, "Порт должен быть от 1 до 65535");
+        return;
     }
+    lv_label_set_text(g_portError, "");
+    net.mqttPort = static_cast<uint16_t>(parsed);
 
     const char* user = lv_textarea_get_text(g_userField);
     strncpy(net.mqttUser, user, sizeof(net.mqttUser) - 1);
@@ -101,6 +105,10 @@ void build(lv_obj_t* parent) {
                                   "например, 192.168.1.10", false);
     g_portField = buildTextField(parent, "Порт", 5, "1883", false);
     lv_textarea_set_accepted_chars(g_portField, "0123456789");
+    g_portError = lv_label_create(parent);
+    lv_obj_set_style_text_font(g_portError, &font_ru_14, 0);
+    lv_obj_set_style_text_color(g_portError, lv_color_hex(0xE04040), 0);
+    lv_label_set_text(g_portError, "");
     g_userField = buildTextField(parent, "Логин", sizeof(Settings::NetConfig::mqttUser) - 1, nullptr, false);
     g_passField = buildTextField(parent, "Пароль", sizeof(Settings::NetConfig::mqttPass) - 1,
                                   "оставьте пустым, чтобы не менять", true);
@@ -143,6 +151,7 @@ void refresh() {
     char portBuf[8];
     snprintf(portBuf, sizeof(portBuf), "%u", net.mqttPort);
     lv_textarea_set_text(g_portField, portBuf);
+    lv_label_set_text(g_portError, "");
 
     lv_textarea_set_text(g_userField, net.mqttUser);
     lv_textarea_set_text(g_passField, "");  // пароль никогда не подставляется в поле
