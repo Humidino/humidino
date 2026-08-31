@@ -702,7 +702,10 @@
 #define LV_FONT_FMT_TXT_LARGE 0
 
 /** Enables/disables support for compressed fonts. */
-#define LV_USE_FONT_COMPRESSED 0
+// Наши кастомные кириллические шрифты (src/fonts/font_ru_*.c) сгенерированы
+// lv_font_conv со сжатием (bitmap_format = 1) — без этого флага их глифы
+// (в первую очередь кириллица) рендерятся некорректно/пусто.
+#define LV_USE_FONT_COMPRESSED 1
 
 /** Enable drawing placeholders when glyph dsc is not found. */
 #define LV_USE_FONT_PLACEHOLDER 1

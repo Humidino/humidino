@@ -81,16 +81,16 @@ ZonePanelWidgets buildZonePanel(lv_obj_t* parent, const char* title, bool showDe
 
     w.temp = lv_label_create(panel);
     lv_obj_set_style_text_font(w.temp, &font_ru_20, 0);
-    lv_label_set_text(w.temp, "--.- °C");
+    lv_label_set_text(w.temp, "Нет данных");
 
     w.rh = lv_label_create(panel);
     lv_obj_set_style_text_font(w.rh, &font_ru_20, 0);
-    lv_label_set_text(w.rh, "--.- %");
+    lv_label_set_text(w.rh, "");
 
     if (showDewPoint) {
         w.dew = lv_label_create(panel);
         lv_obj_set_style_text_font(w.dew, &font_ru_14, 0);
-        lv_label_set_text(w.dew, "Точка росы: --.- °C");
+        lv_label_set_text(w.dew, "");
     } else {
         w.dew = nullptr;
     }
@@ -127,9 +127,12 @@ void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r) {
             lv_label_set_text(w.dew, buf);
         }
     } else {
-        lv_label_set_text(w.temp, "--.- °C");
-        lv_label_set_text(w.rh, "--.- %");
-        if (w.dew != nullptr) lv_label_set_text(w.dew, "Точка росы: --.- °C");
+        // Единая явная надпись вместо трёх строк с прочерками — иначе панель
+        // отключённого датчика выглядит как визуально пустая, а не как
+        // сообщение об отсутствии данных.
+        lv_label_set_text(w.temp, "Нет данных");
+        lv_label_set_text(w.rh, "");
+        if (w.dew != nullptr) lv_label_set_text(w.dew, "");
     }
 
     lv_label_set_text(w.errBadge, r.error ? "ERR" : "");
