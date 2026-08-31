@@ -62,6 +62,7 @@ void begin() {
         .setAuthentication(DEVICE_HOSTNAME, g_webPassword);
 
     g_server.on("/api/state", HTTP_GET, [](AsyncWebServerRequest* req) {
+        if (!requireAuthentication(req)) return;
         JsonDocument doc;
         Telemetry::buildStateJson(doc);
         String out;
@@ -70,6 +71,7 @@ void begin() {
     });
 
     g_server.on("/api/settings", HTTP_GET, [](AsyncWebServerRequest* req) {
+        if (!requireAuthentication(req)) return;
         JsonDocument doc;
         Telemetry::buildSettingsJson(doc);
         String out;
@@ -102,6 +104,7 @@ void begin() {
 
     // --- Пресеты порогов ---
     g_server.on("/api/presets", HTTP_GET, [](AsyncWebServerRequest* req) {
+        if (!requireAuthentication(req)) return;
         JsonDocument doc;
         writePresetsJson(doc, Settings::loadPresets());
         String out;
@@ -175,6 +178,7 @@ void begin() {
     // кто уже его знает; POST без поля mqtt_pass (или с пустым значением)
     // оставляет сохранённый пароль без изменений.
     g_server.on("/api/network", HTTP_GET, [](AsyncWebServerRequest* req) {
+        if (!requireAuthentication(req)) return;
         Settings::NetConfig net = Settings::loadNet();
         JsonDocument doc;
         doc["mqtt_host"] = net.mqttHost;
