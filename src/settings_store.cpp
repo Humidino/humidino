@@ -66,33 +66,6 @@ void save(const RuntimeSettings& settings) {
     xSemaphoreGive(g_mutex);
 }
 
-NetConfig loadNet() {
-    NetConfig n;
-    if (!lockPrefs()) return n;
-    g_prefs.begin(kNamespace, true);
-    g_prefs.getString("mqtt_host", n.mqttHost, sizeof(n.mqttHost));
-    n.mqttPort = g_prefs.getUShort("mqtt_port", DEFAULT_MQTT_PORT);
-    g_prefs.getString("mqtt_user", n.mqttUser, sizeof(n.mqttUser));
-    g_prefs.getString("mqtt_pass", n.mqttPass, sizeof(n.mqttPass));
-    String topic = g_prefs.getString("mqtt_topic", DEFAULT_MQTT_BASE_TOPIC);
-    strncpy(n.mqttBaseTopic, topic.c_str(), sizeof(n.mqttBaseTopic) - 1);
-    g_prefs.end();
-    xSemaphoreGive(g_mutex);
-    return n;
-}
-
-void saveNet(const NetConfig& net) {
-    if (!lockPrefs()) return;
-    g_prefs.begin(kNamespace, false);
-    g_prefs.putString("mqtt_host", net.mqttHost);
-    g_prefs.putUShort("mqtt_port", net.mqttPort);
-    g_prefs.putString("mqtt_user", net.mqttUser);
-    g_prefs.putString("mqtt_pass", net.mqttPass);
-    g_prefs.putString("mqtt_topic", net.mqttBaseTopic);
-    g_prefs.end();
-    xSemaphoreGive(g_mutex);
-}
-
 // Пресеты хранятся одним JSON-блобом в ключе "presets_json" — их немного
 // (до kMaxPresets) и они всегда читаются/пишутся целиком, так что отдельные
 // NVS-ключи на каждое поле были бы лишней сложностью.

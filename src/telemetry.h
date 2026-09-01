@@ -1,9 +1,8 @@
 #pragma once
 #include <ArduinoJson.h>
 
-// Общий формат JSON для телеметрии/настроек, который использует и локальный
-// веб-интерфейс (network.cpp), и публикация в MQTT (mqtt.cpp) — так они не
-// расходятся между собой.
+// Общий формат JSON для телеметрии/настроек, который использует локальный
+// веб-интерфейс (web_server.cpp).
 namespace Telemetry {
 
 void buildStateJson(JsonDocument& doc);

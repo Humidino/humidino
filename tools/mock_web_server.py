@@ -3,10 +3,9 @@
 Локальный мок-сервер для веб-интерфейса Humidino.
 
 Отдаёт data/index.html и имитирует REST API прошивки (/api/state,
-/api/settings, /api/presets, /api/network) со случайными, но правдоподобными
+/api/settings, /api/presets) со случайными, но правдоподобными
 данными — позволяет открыть и потестировать веб-интерфейс в браузере без
-реального ESP32: анимацию вентилятора, переключение режимов, пресеты,
-форму настроек сети/MQTT.
+реального ESP32: анимацию вентилятора, переключение режимов, пресеты.
 
 Использование:
     python tools/mock_web_server.py [порт]
@@ -52,15 +51,6 @@ presets = [
      "min_runtime_ms": 15 * 60 * 1000, "min_pause_ms": 20 * 60 * 1000},
 ]
 
-network = {
-    "mqtt_host": "",
-    "mqtt_port": 1883,
-    "mqtt_user": "",
-    "mqtt_pass": "",
-    "mqtt_topic": "humidino",
-}
-
-
 def fake_zone(base_temp, base_rh, with_dew, error=False):
     t = base_temp + random.uniform(-0.3, 0.3)
     rh = max(0.0, min(100.0, base_rh + random.uniform(-1.5, 1.5)))
@@ -92,16 +82,6 @@ def build_state():
     }
 
 
-def network_public():
-    return {
-        "mqtt_host": network["mqtt_host"],
-        "mqtt_port": network["mqtt_port"],
-        "mqtt_user": network["mqtt_user"],
-        "mqtt_topic": network["mqtt_topic"],
-        "mqtt_pass_set": bool(network["mqtt_pass"]),
-    }
-
-
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(DATA_DIR), **kwargs)
@@ -129,8 +109,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._send_json(settings)
         elif self.path == "/api/presets":
             self._send_json(presets)
-        elif self.path == "/api/network":
-            self._send_json(network_public())
         else:
             super().do_GET()
 
@@ -149,14 +127,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             for key in ("rh_target", "hysteresis_pct", "freeze_c", "min_runtime_ms", "min_pause_ms"):
                 settings[key] = preset[key]
             self._send_json(settings)
-        elif self.path == "/api/network":
-            incoming = self._read_json() or {}
-            for key in ("mqtt_host", "mqtt_port", "mqtt_user", "mqtt_topic"):
-                if key in incoming:
-                    network[key] = incoming[key]
-            if incoming.get("mqtt_pass"):
-                network["mqtt_pass"] = incoming["mqtt_pass"]
-            self._send_json(network_public())
         else:
             self.send_error(404)
 
