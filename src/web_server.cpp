@@ -5,8 +5,10 @@
 #include <ESPAsyncWebServer.h>
 #include <LittleFS.h>
 #include <cstring>
+#include <esp_random.h>
 
 #include "config.h"
+#include "settings_actions.h"
 #include "settings_store.h"
 #include "shared_state.h"
 #include "telemetry.h"
@@ -14,6 +16,26 @@
 namespace {
 
 AsyncWebServer g_server(WEB_SERVER_PORT);
+char g_webPassword[33] = "";
+
+bool requireAuthentication(AsyncWebServerRequest* req) {
+    if (req->authenticate(DEVICE_HOSTNAME, g_webPassword)) return true;
+    req->requestAuthentication(DEVICE_HOSTNAME, true);
+    return false;
+}
+
+void loadWebPassword() {
+    Settings::NetConfig net = Settings::loadNet();
+    if (net.webPassword[0] == '\0') {
+        snprintf(net.webPassword, sizeof(net.webPassword), "%08lx%08lx%08lx%08lx",
+                 static_cast<unsigned long>(esp_random()), static_cast<unsigned long>(esp_random()),
+                 static_cast<unsigned long>(esp_random()), static_cast<unsigned long>(esp_random()));
+        Settings::saveNet(net);
+    }
+    strncpy(g_webPassword, net.webPassword, sizeof(g_webPassword) - 1);
+    g_webPassword[sizeof(g_webPassword) - 1] = '\0';
+    Serial.printf("Web login: %s / %s\n", DEVICE_HOSTNAME, g_webPassword);
+}
 
 void writePresetsJson(JsonDocument& doc, const std::vector<Settings::Preset>& presets) {
     JsonArray arr = doc.to<JsonArray>();
@@ -34,9 +56,13 @@ namespace LocalWebServer {
 
 void begin() {
     LittleFS.begin(true);
-    g_server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+    loadWebPassword();
+    g_server.serveStatic("/", LittleFS, "/")
+        .setDefaultFile("index.html")
+        .setAuthentication(DEVICE_HOSTNAME, g_webPassword);
 
     g_server.on("/api/state", HTTP_GET, [](AsyncWebServerRequest* req) {
+        if (!requireAuthentication(req)) return;
         JsonDocument doc;
         Telemetry::buildStateJson(doc);
         String out;
@@ -45,6 +71,7 @@ void begin() {
     });
 
     g_server.on("/api/settings", HTTP_GET, [](AsyncWebServerRequest* req) {
+        if (!requireAuthentication(req)) return;
         JsonDocument doc;
         Telemetry::buildSettingsJson(doc);
         String out;
@@ -54,6 +81,7 @@ void begin() {
 
     g_server.addHandler(new AsyncCallbackJsonWebHandler(
         "/api/settings", [](AsyncWebServerRequest* req, JsonVariant& json) {
+            if (!requireAuthentication(req)) return;
             JsonObject body = json.as<JsonObject>();
             RuntimeSettings settings = ShaState::getSettings();
 
@@ -64,8 +92,7 @@ void begin() {
             if (body["min_pause_ms"].is<uint32_t>()) settings.minPauseMs = body["min_pause_ms"];
             if (body["mode"].is<const char*>()) settings.mode = operatingModeFromString(body["mode"]);
 
-            ShaState::updateSettings(settings);
-            Settings::save(settings);
+            SettingsActions::applyRuntimeSettings(settings);
 
             JsonDocument resp;
             Telemetry::buildSettingsJson(resp);
@@ -76,6 +103,7 @@ void begin() {
 
     // --- Пресеты порогов ---
     g_server.on("/api/presets", HTTP_GET, [](AsyncWebServerRequest* req) {
+        if (!requireAuthentication(req)) return;
         JsonDocument doc;
         writePresetsJson(doc, Settings::loadPresets());
         String out;
@@ -85,12 +113,14 @@ void begin() {
 
     g_server.addHandler(new AsyncCallbackJsonWebHandler(
         "/api/presets", [](AsyncWebServerRequest* req, JsonVariant& json) {
+            if (!requireAuthentication(req)) return;
             JsonArray arr = json.as<JsonArray>();
             std::vector<Settings::Preset> presets;
             for (JsonObject p : arr) {
                 if (presets.size() >= Settings::kMaxPresets) break;
-                Settings::Preset preset;
+                Settings::Preset preset{};
                 strncpy(preset.name, (p["name"] | ""), sizeof(preset.name) - 1);
+                preset.name[sizeof(preset.name) - 1] = '\0';
                 if (strlen(preset.name) == 0) continue;  // без имени пресет не имеет смысла
                 preset.values.rhTargetPercent = p["rh_target"] | DEFAULT_RH_TARGET_PERCENT;
                 preset.values.hysteresisPercent = p["hysteresis_pct"] | DEFAULT_HYSTERESIS_PERCENT;
@@ -110,29 +140,13 @@ void begin() {
 
     g_server.addHandler(new AsyncCallbackJsonWebHandler(
         "/api/presets/apply", [](AsyncWebServerRequest* req, JsonVariant& json) {
+            if (!requireAuthentication(req)) return;
             const char* name = json["name"] | "";
-            std::vector<Settings::Preset> presets = Settings::loadPresets();
-            const Settings::Preset* found = nullptr;
-            for (const auto& p : presets) {
-                if (strcmp(p.name, name) == 0) {
-                    found = &p;
-                    break;
-                }
-            }
-            if (found == nullptr) {
+            RuntimeSettings settings;
+            if (!SettingsActions::applyPresetByName(name, settings)) {
                 req->send(404, "application/json", "{\"error\":\"preset not found\"}");
                 return;
             }
-
-            RuntimeSettings settings = ShaState::getSettings();
-            settings.rhTargetPercent = found->values.rhTargetPercent;
-            settings.hysteresisPercent = found->values.hysteresisPercent;
-            settings.freezeProtectC = found->values.freezeProtectC;
-            settings.minRuntimeMs = found->values.minRuntimeMs;
-            settings.minPauseMs = found->values.minPauseMs;
-
-            ShaState::updateSettings(settings);
-            Settings::save(settings);
 
             JsonDocument resp;
             Telemetry::buildSettingsJson(resp);

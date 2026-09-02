@@ -8,7 +8,8 @@
 
 #include "backlight.h"
 #include "config.h"
-#include "ui_dashboard.h"
+#include "settings_store.h"
+#include "ui_root.h"
 #include "watchdog.h"
 
 namespace {
@@ -23,6 +24,51 @@ uint8_t* g_buf1 = nullptr;
 uint8_t* g_buf2 = nullptr;
 
 uint32_t lvTickGetCb() { return millis(); }
+
+// Загружает калибровку тачскрина из NVS, если она уже есть; иначе запускает
+// интерактивную калибровку TFT_eSPI (просит коснуться меток по очереди) и
+// сохраняет результат — так это делается только один раз за всё время
+// жизни устройства (или до сброса NVS). Вызывается до lv_init(), пока
+// экран ещё рисуется напрямую через TFT_eSPI, а не через LVGL.
+void setupTouch() {
+    uint16_t calData[Settings::kTouchCalibrationValues];
+    if (Settings::loadTouchCalibration(calData)) {
+        g_tft.setTouch(calData);
+        return;
+    }
+
+    // calibrateTouch() блокирует до тех пор, пока пользователь не коснётся
+    // всех меток — это может быть дольше WDT_TIMEOUT_S, если устройство
+    // включили без присмотра. Снимаем текущую задачу с watchdog на время
+    // калибровки, иначе получим перезагрузку прямо посреди неё.
+    Watchdog::unregisterCurrentTask();
+
+    g_tft.fillScreen(TFT_BLACK);
+    g_tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    g_tft.setTextDatum(MC_DATUM);
+    g_tft.drawString("Touch each cross to calibrate", g_tft.width() / 2, 20, 2);
+    g_tft.calibrateTouch(calData, TFT_MAGENTA, TFT_BLACK, 15);
+
+    Watchdog::registerCurrentTask();
+
+    Settings::saveTouchCalibration(calData);
+}
+
+void touchReadCb(lv_indev_t*, lv_indev_data_t* data) {
+    uint16_t x, y;
+    if (g_tft.getTouch(&x, &y, 600)) {
+        data->state = LV_INDEV_STATE_PRESSED;
+        data->point.x = x;
+        data->point.y = y;
+        // Раньше подсветка сбрасывала таймер гашения только при смене
+        // состояния реле (см. relay.cpp) — экран мог потускнеть прямо
+        // во время работы с тач-интерфейсом. Любое касание тоже должно
+        // считаться активностью.
+        Backlight::noteActivity();
+    } else {
+        data->state = LV_INDEV_STATE_RELEASED;
+    }
+}
 
 void flushCb(lv_display_t* disp, const lv_area_t* area, uint8_t* pxMap) {
     uint32_t w = area->x2 - area->x1 + 1;
@@ -71,7 +117,12 @@ void lvglTask(void*) {
     g_tft.setRotation(1);  // альбомная ориентация; подправить на стенде, если панель выйдет зеркальной/повёрнутой
     g_tft.fillScreen(TFT_BLACK);
 
+    // Подсветку нужно включить ДО калибровки тача — иначе экран может
+    // оставаться тёмным (пин GPIO2 без ledc не гарантированно светится) как
+    // раз тогда, когда пользователю нужно увидеть метки и коснуться их.
     Backlight::begin();
+
+    setupTouch();
 
     lv_init();
     lv_tick_set_cb(lvTickGetCb);
@@ -86,8 +137,12 @@ void lvglTask(void*) {
         }
     }
 
-    UiDashboard::build();
-    lv_timer_create([](lv_timer_t*) { UiDashboard::update(); }, 500, nullptr);
+    lv_indev_t* touchIndev = lv_indev_create();
+    lv_indev_set_type(touchIndev, LV_INDEV_TYPE_POINTER);
+    lv_indev_set_read_cb(touchIndev, touchReadCb);  // читает g_tft.getTouch() каждый цикл lv_timer_handler()
+
+    UiRoot::build();
+    lv_timer_create([](lv_timer_t*) { UiRoot::update(); }, 500, nullptr);
 
     Backlight::setLevel(BACKLIGHT_FULL_PCT);
 
@@ -105,7 +160,10 @@ void lvglTask(void*) {
 namespace Display {
 
 void begin() {
-    xTaskCreatePinnedToCore(lvglTask, "lvglTask", 8192, nullptr, 2, nullptr, 1);
+    // Стек увеличен с 8192 после добавления тач-интерфейса (4 экрана вместо
+    // одного дашборда, экранная клавиатура) — запас на случай более глубоких
+    // цепочек вызовов при построении/событиях LVGL-виджетов.
+    xTaskCreatePinnedToCore(lvglTask, "lvglTask", 16384, nullptr, 2, nullptr, 1);
 }
 
 }  // namespace Display

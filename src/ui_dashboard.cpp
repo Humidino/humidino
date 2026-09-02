@@ -7,15 +7,16 @@
 #include "config.h"
 #include "fonts/fonts.h"
 #include "relay.h"
+#include "settings_actions.h"
 #include "shared_state.h"
 
 namespace {
 
 struct ZonePanelWidgets {
-    lv_obj_t* temp;
-    lv_obj_t* rh;
-    lv_obj_t* dew;      // nullptr для зон без точки росы (Улица/Дом)
+    lv_obj_t* value;    // "23.4 °C   61.2 %" одной строкой
+    lv_obj_t* dew;      // всегда существует, но не заполняется для зон без точки росы (Улица)
     lv_obj_t* errBadge;
+    bool hasDew;
 };
 
 lv_obj_t* g_uptimeLabel;
@@ -25,51 +26,93 @@ lv_obj_t* g_modeLabel;
 lv_obj_t* g_banner;
 lv_obj_t* g_bannerLabel;
 lv_obj_t* g_spinner;  // видна и крутится только пока реле включено — см. update()
+lv_obj_t* g_modeButtons[3];  // Авто/Вкл/Выкл, индекс соответствует OperatingMode
 ZonePanelWidgets g_panels[static_cast<size_t>(SensorId::Count)];
+
+// Меняет только режим, остальные пороги/тайминги оставляет как есть —
+// то же самое, что делает POST /api/settings с одним полем "mode" из
+// веб-интерфейса (см. web_server.cpp).
+void setMode(OperatingMode mode) {
+    RuntimeSettings settings = ShaState::getSettings();
+    if (settings.mode == mode) return;
+    settings.mode = mode;
+    SettingsActions::applyRuntimeSettings(settings);
+}
+
+void onModeAutoClicked(lv_event_t*) { setMode(OperatingMode::Auto); }
+void onModeOnClicked(lv_event_t*) { setMode(OperatingMode::ManualOn); }
+void onModeOffClicked(lv_event_t*) { setMode(OperatingMode::ManualOff); }
+
+lv_obj_t* buildModeButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb) {
+    lv_obj_t* btn = lv_button_create(parent);
+    lv_obj_set_flex_grow(btn, 1);
+    lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* label = lv_label_create(btn);
+    lv_obj_set_style_text_font(label, &font_ru_14, 0);
+    lv_label_set_text(label, text);
+    lv_obj_center(label);
+
+    return btn;
+}
 
 const char* kZoneTitles[] = {
     "Приточка подпола",
+    "Середина подпола",
     "Дальний угол подпола",
     "Улица",
-    "Дом",
 };
 
 bool zoneHasDewPoint(SensorId id) {
-    return id == SensorId::CrawlspaceIntake || id == SensorId::CrawlspaceCorner;
+    return id != SensorId::Outside;
 }
 
-ZonePanelWidgets buildZonePanel(lv_obj_t* parent, const char* title, bool showDewPoint) {
-    lv_obj_t* panel = lv_obj_create(parent);
-    lv_obj_set_style_pad_all(panel, 6, 0);
-    lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_border_width(panel, 1, 0);
+// Одна зона — одна горизонтальная строка на всю ширину экрана: title | value
+// | точка росы | ERR. При 4 зонах на книжной сетке 2x2 в альбомной
+// ориентации 480x320 на ячейку остаётся ~67px высоты — этого не хватает даже
+// на 3 строки текста, отсюда обрезанные подписи и невидимый бейдж ERR на
+// фото с платы. Список строк вместо карточек использует свободную ширину
+// экрана вместо тесной высоты.
+ZonePanelWidgets buildZoneRow(lv_obj_t* parent, const char* title, bool hasDew) {
+    lv_obj_t* row = lv_obj_create(parent);
+    lv_obj_set_width(row, LV_PCT(100));
+    lv_obj_set_flex_grow(row, 1);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_hor(row, 6, 0);
+    lv_obj_set_style_pad_column(row, 6, 0);
+    lv_obj_set_style_radius(row, 0, 0);
+    lv_obj_set_style_border_width(row, 1, 0);
+    lv_obj_set_style_border_side(row, LV_BORDER_SIDE_BOTTOM, 0);
+    lv_obj_set_style_border_color(row, lv_color_hex(0x2A323C), 0);
 
-    lv_obj_t* titleLabel = lv_label_create(panel);
-    lv_label_set_text(titleLabel, title);
+    lv_obj_t* titleLabel = lv_label_create(row);
     lv_obj_set_style_text_font(titleLabel, &font_ru_14, 0);
+    lv_label_set_text(titleLabel, title);
+    lv_obj_set_width(titleLabel, LV_PCT(30));
+    lv_label_set_long_mode(titleLabel, LV_LABEL_LONG_DOT);
 
     ZonePanelWidgets w{};
 
-    w.temp = lv_label_create(panel);
-    lv_obj_set_style_text_font(w.temp, &font_ru_20, 0);
-    lv_label_set_text(w.temp, "--.- °C");
+    w.value = lv_label_create(row);
+    lv_obj_set_style_text_font(w.value, &font_ru_20, 0);
+    lv_label_set_text(w.value, "Нет данных");
+    lv_obj_set_width(w.value, LV_PCT(28));
+    lv_label_set_long_mode(w.value, LV_LABEL_LONG_DOT);
 
-    w.rh = lv_label_create(panel);
-    lv_obj_set_style_text_font(w.rh, &font_ru_20, 0);
-    lv_label_set_text(w.rh, "--.- %");
+    w.dew = lv_label_create(row);
+    lv_obj_set_style_text_font(w.dew, &font_ru_14, 0);
+    lv_label_set_text(w.dew, "");
+    lv_obj_set_width(w.dew, LV_PCT(30));
+    lv_label_set_long_mode(w.dew, LV_LABEL_LONG_DOT);
+    w.hasDew = hasDew;
 
-    if (showDewPoint) {
-        w.dew = lv_label_create(panel);
-        lv_obj_set_style_text_font(w.dew, &font_ru_14, 0);
-        lv_label_set_text(w.dew, "Точка росы: --.- °C");
-    } else {
-        w.dew = nullptr;
-    }
-
-    w.errBadge = lv_label_create(panel);
+    w.errBadge = lv_label_create(row);
     lv_obj_set_style_text_font(w.errBadge, &font_ru_14, 0);
     lv_obj_set_style_text_color(w.errBadge, lv_color_hex(0xE04040), 0);
     lv_label_set_text(w.errBadge, "");
+    lv_obj_set_flex_grow(w.errBadge, 1);
+    lv_obj_set_style_text_align(w.errBadge, LV_TEXT_ALIGN_RIGHT, 0);
 
     return w;
 }
@@ -87,20 +130,19 @@ void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r) {
     char buf[32];
 
     if (r.valid) {
-        snprintf(buf, sizeof(buf), "%.1f °C", r.temperatureC);
-        lv_label_set_text(w.temp, buf);
+        snprintf(buf, sizeof(buf), "%.1f °C  %.1f %%", r.temperatureC, r.humidityPct);
+        lv_label_set_text(w.value, buf);
 
-        snprintf(buf, sizeof(buf), "%.1f %%", r.humidityPct);
-        lv_label_set_text(w.rh, buf);
-
-        if (w.dew != nullptr) {
-            snprintf(buf, sizeof(buf), "Точка росы: %.1f °C", r.dewPointC);
+        if (w.hasDew) {
+            snprintf(buf, sizeof(buf), "т.р. %.1f °C", r.dewPointC);
             lv_label_set_text(w.dew, buf);
         }
     } else {
-        lv_label_set_text(w.temp, "--.- °C");
-        lv_label_set_text(w.rh, "--.- %");
-        if (w.dew != nullptr) lv_label_set_text(w.dew, "Точка росы: --.- °C");
+        // Единая явная надпись вместо прочерков — иначе строка отключённого
+        // датчика выглядит как визуально пустая, а не как сообщение об
+        // отсутствии данных.
+        lv_label_set_text(w.value, "Нет данных");
+        if (w.hasDew) lv_label_set_text(w.dew, "");
     }
 
     lv_label_set_text(w.errBadge, r.error ? "ERR" : "");
@@ -125,8 +167,8 @@ lv_color_t bannerColorFor(RelayControlState state) {
 
 namespace UiDashboard {
 
-void build() {
-    lv_obj_t* scr = lv_screen_active();
+void build(lv_obj_t* parent) {
+    lv_obj_t* scr = parent;
     lv_obj_set_flex_flow(scr, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x101418), 0);
     lv_obj_set_style_pad_all(scr, 4, 0);
@@ -155,24 +197,35 @@ void build() {
     lv_obj_set_style_text_color(g_modeLabel, lv_color_hex(0x8AA0B8), 0);
     lv_label_set_text(g_modeLabel, "АВТО");
 
-    // --- Сетка зон 2x2 ---
-    static int32_t colDsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-    static int32_t rowDsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+    // --- Кнопки переключения режима (дублируют веб-интерфейс) ---
+    lv_obj_t* modeRow = lv_obj_create(scr);
+    lv_obj_set_size(modeRow, LV_PCT(100), 34);
+    lv_obj_set_flex_flow(modeRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(modeRow, 4, 0);
+    lv_obj_set_style_pad_all(modeRow, 0, 0);
+    lv_obj_set_style_border_width(modeRow, 0, 0);
 
-    lv_obj_t* grid = lv_obj_create(scr);
-    lv_obj_set_size(grid, LV_PCT(100), LV_PCT(70));
-    lv_obj_set_grid_dsc_array(grid, colDsc, rowDsc);
-    lv_obj_set_style_pad_all(grid, 2, 0);
-    lv_obj_set_style_pad_gap(grid, 4, 0);
+    g_modeButtons[static_cast<size_t>(OperatingMode::Auto)] =
+        buildModeButton(modeRow, "АВТО", onModeAutoClicked);
+    g_modeButtons[static_cast<size_t>(OperatingMode::ManualOn)] =
+        buildModeButton(modeRow, "ВКЛ", onModeOnClicked);
+    g_modeButtons[static_cast<size_t>(OperatingMode::ManualOff)] =
+        buildModeButton(modeRow, "ВЫКЛ", onModeOffClicked);
+
+    // --- Список зон (4 строки на всю ширину) ---
+    // Список вместо карточек 2x2: в альбомной ориентации высоты под сетку
+    // остаётся мало, а ширины — много, поэтому каждая зона занимает одну
+    // горизонтальную строку, а не тесную колонку из нескольких строк текста.
+    lv_obj_t* list = lv_obj_create(scr);
+    lv_obj_set_width(list, LV_PCT(100));
+    lv_obj_set_flex_grow(list, 1);
+    lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(list, 0, 0);
+    lv_obj_set_style_border_width(list, 1, 0);
 
     for (size_t i = 0; i < static_cast<size_t>(SensorId::Count); i++) {
         SensorId id = static_cast<SensorId>(i);
-        int col = i % 2;
-        int row = i / 2;
-        lv_obj_t* cell = lv_obj_create(grid);
-        lv_obj_set_grid_cell(cell, LV_GRID_ALIGN_STRETCH, col, 1, LV_GRID_ALIGN_STRETCH, row, 1);
-        lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_COLUMN);
-        g_panels[i] = buildZonePanel(cell, kZoneTitles[i], zoneHasDewPoint(id));
+        g_panels[i] = buildZoneRow(list, kZoneTitles[i], zoneHasDewPoint(id));
     }
 
     // --- Баннер статуса ---
@@ -216,6 +269,12 @@ void update() {
     lv_label_set_text(g_ramLabel, buf);
 
     lv_label_set_text(g_modeLabel, Relay::modeBadgeText(snapshot.settings.mode));
+
+    for (size_t i = 0; i < 3; i++) {
+        bool active = (i == static_cast<size_t>(snapshot.settings.mode));
+        lv_obj_set_style_bg_color(g_modeButtons[i],
+                                   active ? lv_color_hex(0x2E6DA4) : lv_color_hex(0x3A4048), 0);
+    }
 
     lv_label_set_text(g_bannerLabel, Relay::bannerText(snapshot.relay.state));
     lv_obj_set_style_bg_color(g_banner, bannerColorFor(snapshot.relay.state), 0);

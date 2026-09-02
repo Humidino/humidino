@@ -62,13 +62,37 @@ SensorContext g_sensors[] = {
     {SensorId::CrawlspaceIntake, Adafruit_SHT31(&Wire), &Wire, SHT31_ADDR_A, PIN_I2C0_SDA, PIN_I2C0_SCL},
     {SensorId::CrawlspaceCorner, Adafruit_SHT31(&Wire), &Wire, SHT31_ADDR_B, PIN_I2C0_SDA, PIN_I2C0_SCL},
     {SensorId::Outside,          Adafruit_SHT31(&Wire1), &Wire1, SHT31_ADDR_A, PIN_I2C1_SDA, PIN_I2C1_SCL},
-    {SensorId::House,            Adafruit_SHT31(&Wire1), &Wire1, SHT31_ADDR_B, PIN_I2C1_SDA, PIN_I2C1_SCL},
+    {SensorId::CrawlspaceMiddle, Adafruit_SHT31(&Wire1), &Wire1, SHT31_ADDR_B, PIN_I2C1_SDA, PIN_I2C1_SCL},
 };
 constexpr size_t kSensorCount = sizeof(g_sensors) / sizeof(g_sensors[0]);
+
+// Сканирует шину и печатает найденные адреса в Serial — единственный способ
+// на месте отличить "физически ничего не отвечает" (обрыв/питание/подтяжки)
+// от "отвечает не на том адресе" (ADDR разведён не так, как ждёт прошивка).
+void scanBus(const char* label, TwoWire& bus) {
+    Serial.printf("I2C scan %s: ", label);
+    bool found = false;
+    for (uint8_t addr = 1; addr < 127; addr++) {
+        bus.beginTransmission(addr);
+        if (bus.endTransmission() == 0) {
+            Serial.printf("0x%02X ", addr);
+            found = true;
+        }
+    }
+    if (!found) Serial.print("(нет ответов)");
+    Serial.println();
+}
 
 void initBuses() {
     Wire.begin(PIN_I2C0_SDA, PIN_I2C0_SCL, I2C_CLOCK_HZ);
     Wire1.begin(PIN_I2C1_SDA, PIN_I2C1_SCL, I2C_CLOCK_HZ);
+    // Явный таймаут транзакции: без него отключённый/безподтяжечный датчик
+    // может подвесить шину на неопределённое время и уронить sensorTask по
+    // watchdog раньше, чем сработает штатное восстановление шины ниже.
+    Wire.setTimeOut(I2C_TRANSACTION_TIMEOUT_MS);
+    Wire1.setTimeOut(I2C_TRANSACTION_TIMEOUT_MS);
+    scanBus("Wire (I2C0, GPIO21/18)", Wire);
+    scanBus("Wire1 (I2C1, GPIO47/48)", Wire1);
     for (auto& ctx : g_sensors) {
         ctx.sht.begin(ctx.addr);
     }
@@ -111,6 +135,8 @@ void pollOneSensor(SensorContext& ctx) {
         reading.error = false;
     } else {
         ctx.consecutiveFailures++;
+        Serial.printf("Sensor %d (addr 0x%02X) poll failed, streak=%u\n",
+                      static_cast<int>(ctx.id), ctx.addr, ctx.consecutiveFailures);
         // Оставляем на дисплее последние известные отфильтрованные значения,
         // просто помечая ошибку — единичный сбой не должен обнулять панель.
         SystemState snapshot;
@@ -134,8 +160,12 @@ void sensorTask(void*) {
     for (;;) {
         for (auto& ctx : g_sensors) {
             pollOneSensor(ctx);
+            // Кормим watchdog после каждого датчика, а не только в конце
+            // прохода по всем четырём — иначе время ожидания зависшего/
+            // отключённого датчика на одной шине суммируется с остальными и
+            // может выбить WDT_TIMEOUT_S раньше, чем найдётся виновник.
+            Watchdog::feed();
         }
-        Watchdog::feed();
         vTaskDelay(pdMS_TO_TICKS(SENSOR_POLL_INTERVAL_MS));
     }
 }

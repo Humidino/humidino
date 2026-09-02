@@ -27,11 +27,12 @@ public:
 
     void update(const SensorReading readings[4], const RuntimeSettings& cfg, uint32_t nowMs) {
         const SensorReading& intake = readings[static_cast<size_t>(SensorId::CrawlspaceIntake)];
+        const SensorReading& middle = readings[static_cast<size_t>(SensorId::CrawlspaceMiddle)];
         const SensorReading& corner = readings[static_cast<size_t>(SensorId::CrawlspaceCorner)];
         const SensorReading& outside = readings[static_cast<size_t>(SensorId::Outside)];
 
-        bool sensorsHealthy = intake.valid && corner.valid && outside.valid &&
-                               !intake.error && !corner.error && !outside.error;
+        bool sensorsHealthy = intake.valid && middle.valid && corner.valid && outside.valid &&
+                               !intake.error && !middle.error && !corner.error && !outside.error;
 
         // Заморозка — единственная защита, которая действует безусловно даже
         // в ручных режимах (физическая безопасность конструкции важнее любой
@@ -59,8 +60,8 @@ public:
         } else if (!sensorsHealthy) {
             next = RelayControlState::LockedOutSensorFault;
         } else {
-            float crawlRh = max(intake.humidityPct, corner.humidityPct);
-            float crawlAbsMin = min(intake.absHumidityGm3, corner.absHumidityGm3);
+            float crawlRh = max(intake.humidityPct, max(middle.humidityPct, corner.humidityPct));
+            float crawlAbsMin = min(intake.absHumidityGm3, min(middle.absHumidityGm3, corner.absHumidityGm3));
             bool condensationSafe = outside.absHumidityGm3 < crawlAbsMin;
 
             if (status_.state == RelayControlState::Running) {

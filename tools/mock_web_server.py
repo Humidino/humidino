@@ -66,6 +66,10 @@ def fake_zone(base_temp, base_rh, with_dew, error=False):
 def build_state():
     elapsed = time.time() - START_TIME
     state_str = RELAY_STATE_CYCLE[int(elapsed // STATE_HOLD_SECONDS) % len(RELAY_STATE_CYCLE)]
+    if settings["mode"] == "manual_off" and state_str not in ("locked_freeze", "locked_sensor_fault"):
+        state_str = "idle"
+    elif settings["mode"] == "manual_on" and state_str not in ("locked_freeze", "locked_sensor_fault"):
+        state_str = "running"
     wobble = math.sin(elapsed / 5.0) * 3
 
     return {
@@ -75,9 +79,9 @@ def build_state():
         "relay": {"on": state_str == "running", "state_str": state_str},
         "zones": {
             "crawl_intake": fake_zone(18 + wobble * 0.2, 74, True),
+            "crawl_middle": fake_zone(17.8 + wobble * 0.2, 75, True, error=(int(elapsed) % 30 < 3)),
             "crawl_corner": fake_zone(17.5 + wobble * 0.2, 76, True),
             "outside": fake_zone(9 + wobble, 55, False),
-            "house": fake_zone(21, 48, False, error=(int(elapsed) % 30 < 3)),
         },
     }
 

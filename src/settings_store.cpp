@@ -66,6 +66,24 @@ void save(const RuntimeSettings& settings) {
     xSemaphoreGive(g_mutex);
 }
 
+NetConfig loadNet() {
+    NetConfig n;
+    if (!lockPrefs()) return n;
+    g_prefs.begin(kNamespace, true);
+    g_prefs.getString("web_pass", n.webPassword, sizeof(n.webPassword));
+    g_prefs.end();
+    xSemaphoreGive(g_mutex);
+    return n;
+}
+
+void saveNet(const NetConfig& net) {
+    if (!lockPrefs()) return;
+    g_prefs.begin(kNamespace, false);
+    g_prefs.putString("web_pass", net.webPassword);
+    g_prefs.end();
+    xSemaphoreGive(g_mutex);
+}
+
 // Пресеты хранятся одним JSON-блобом в ключе "presets_json" — их немного
 // (до kMaxPresets) и они всегда читаются/пишутся целиком, так что отдельные
 // NVS-ключи на каждое поле были бы лишней сложностью.
@@ -115,6 +133,24 @@ void savePresets(const std::vector<Preset>& presets) {
     if (!lockPrefs()) return;
     g_prefs.begin(kNamespace, false);
     g_prefs.putString("presets_json", json);
+    g_prefs.end();
+    xSemaphoreGive(g_mutex);
+}
+
+bool loadTouchCalibration(uint16_t out[kTouchCalibrationValues]) {
+    if (!lockPrefs()) return false;
+    g_prefs.begin(kNamespace, true);
+    size_t expected = kTouchCalibrationValues * sizeof(uint16_t);
+    size_t got = g_prefs.getBytes("touch_cal", out, expected);
+    g_prefs.end();
+    xSemaphoreGive(g_mutex);
+    return got == expected;
+}
+
+void saveTouchCalibration(const uint16_t data[kTouchCalibrationValues]) {
+    if (!lockPrefs()) return;
+    g_prefs.begin(kNamespace, false);
+    g_prefs.putBytes("touch_cal", data, kTouchCalibrationValues * sizeof(uint16_t));
     g_prefs.end();
     xSemaphoreGive(g_mutex);
 }
