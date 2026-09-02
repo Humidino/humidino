@@ -155,53 +155,6 @@ void begin() {
             req->send(200, "application/json", out);
         }));
 
-    // --- Настройки сети / MQTT ---
-    // Пароль брокера никогда не возвращается в GET — его видно только тому,
-    // кто уже его знает; POST без поля mqtt_pass (или с пустым значением)
-    // оставляет сохранённый пароль без изменений.
-    g_server.on("/api/network", HTTP_GET, [](AsyncWebServerRequest* req) {
-        if (!requireAuthentication(req)) return;
-        Settings::NetConfig net = Settings::loadNet();
-        JsonDocument doc;
-        doc["mqtt_host"] = net.mqttHost;
-        doc["mqtt_port"] = net.mqttPort;
-        doc["mqtt_user"] = net.mqttUser;
-        doc["mqtt_topic"] = net.mqttBaseTopic;
-        doc["mqtt_pass_set"] = strlen(net.mqttPass) > 0;
-        String out;
-        serializeJson(doc, out);
-        req->send(200, "application/json", out);
-    });
-
-    g_server.addHandler(new AsyncCallbackJsonWebHandler(
-        "/api/network", [](AsyncWebServerRequest* req, JsonVariant& json) {
-            if (!requireAuthentication(req)) return;
-            Settings::NetConfig net = Settings::loadNet();
-            JsonObject body = json.as<JsonObject>();
-
-            if (body["mqtt_host"].is<const char*>())
-                strncpy(net.mqttHost, body["mqtt_host"].as<const char*>(), sizeof(net.mqttHost) - 1);
-            if (body["mqtt_port"].is<uint16_t>()) net.mqttPort = body["mqtt_port"];
-            if (body["mqtt_user"].is<const char*>())
-                strncpy(net.mqttUser, body["mqtt_user"].as<const char*>(), sizeof(net.mqttUser) - 1);
-            if (body["mqtt_pass"].is<const char*>() && strlen(body["mqtt_pass"].as<const char*>()) > 0)
-                strncpy(net.mqttPass, body["mqtt_pass"].as<const char*>(), sizeof(net.mqttPass) - 1);
-            if (body["mqtt_topic"].is<const char*>())
-                strncpy(net.mqttBaseTopic, body["mqtt_topic"].as<const char*>(), sizeof(net.mqttBaseTopic) - 1);
-
-            SettingsActions::saveNetworkConfig(net);
-
-            JsonDocument resp;
-            resp["mqtt_host"] = net.mqttHost;
-            resp["mqtt_port"] = net.mqttPort;
-            resp["mqtt_user"] = net.mqttUser;
-            resp["mqtt_topic"] = net.mqttBaseTopic;
-            resp["mqtt_pass_set"] = strlen(net.mqttPass) > 0;
-            String out;
-            serializeJson(resp, out);
-            req->send(200, "application/json", out);
-        }));
-
     g_server.begin();
 }
 

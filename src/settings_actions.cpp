@@ -2,8 +2,6 @@
 
 #include <cstring>
 
-#include "mqtt.h"
-
 namespace SettingsActions {
 
 void applyRuntimeSettings(const RuntimeSettings& settings) {
@@ -32,11 +30,6 @@ bool applyPresetByName(const char* name, RuntimeSettings& outApplied) {
     applyRuntimeSettings(settings);
     outApplied = settings;
     return true;
-}
-
-void saveNetworkConfig(const Settings::NetConfig& net) {
-    Settings::saveNet(net);
-    Mqtt::reconfigure();
 }
 
 }  // namespace SettingsActions

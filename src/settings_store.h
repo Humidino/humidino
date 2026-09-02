@@ -16,11 +16,6 @@ RuntimeSettings load();
 void save(const RuntimeSettings& settings);
 
 struct NetConfig {
-    char mqttHost[64] = "";
-    uint16_t mqttPort = DEFAULT_MQTT_PORT;
-    char mqttUser[32] = "";
-    char mqttPass[32] = "";
-    char mqttBaseTopic[32] = "humidino";
     char webPassword[33] = "";
 };
 

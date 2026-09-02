@@ -4,7 +4,6 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-#include "mqtt.h"
 #include "shared_state.h"
 #include "watchdog.h"
 #include "web_server.h"
@@ -20,13 +19,10 @@ void netTask(void*) {
 
     Watchdog::registerCurrentTask();
     LocalWebServer::begin();
-    Mqtt::begin();
 
     for (;;) {
         bool connected = (WiFi.status() == WL_CONNECTED);
         ShaState::updateWifi(connected, connected ? static_cast<int8_t>(WiFi.RSSI()) : 0);
-
-        Mqtt::loop();
 
         Watchdog::feed();
         vTaskDelay(pdMS_TO_TICKS(200));

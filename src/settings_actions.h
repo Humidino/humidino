@@ -4,10 +4,9 @@
 
 // Общая логика применения настроек — раньше жила только внутри обработчиков
 // web_server.cpp; вынесена сюда, чтобы touch-интерфейс на дисплее
-// (ui_settings_screen.cpp, ui_presets_screen.cpp, ui_network_screen.cpp) и
-// локальный веб-интерфейс делали ровно одно и то же (обновление
-// SharedState + запись в NVS + переподключение MQTT), а не дублировали и
-// не расходились в поведении.
+// (ui_settings_screen.cpp, ui_presets_screen.cpp) и локальный веб-интерфейс
+// делали ровно одно и то же (обновление SharedState + запись в NVS), а не
+// дублировали и не расходились в поведении.
 namespace SettingsActions {
 
 // Публикует settings в SharedState (немедленно влияет на controlTask) и
@@ -19,9 +18,5 @@ void applyRuntimeSettings(const RuntimeSettings& settings);
 // возвращает итоговые настройки в outApplied. false, если пресет с таким
 // именем не найден.
 bool applyPresetByName(const char* name, RuntimeSettings& outApplied);
-
-// Сохраняет сетевые/MQTT настройки и переподключает MQTT с новыми
-// параметрами без перезагрузки устройства.
-void saveNetworkConfig(const Settings::NetConfig& net);
 
 }  // namespace SettingsActions

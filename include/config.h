@@ -68,9 +68,7 @@ constexpr uint8_t  BACKLIGHT_FULL_PCT       = 100;    // % яркости в р�
 constexpr uint8_t  BACKLIGHT_DIM_PCT        = 15;     // % яркости в приглушённом режиме
 
 // ============================================================================
-// Сеть / MQTT по умолчанию
+// Сеть
 // ============================================================================
 constexpr uint16_t WEB_SERVER_PORT          = 80;
-constexpr uint16_t DEFAULT_MQTT_PORT        = 1883;
-constexpr const char* DEFAULT_MQTT_BASE_TOPIC = "humidino";
 constexpr const char* DEVICE_HOSTNAME       = "humidino";

@@ -128,36 +128,6 @@
   </form>
 </section>
 
-<section>
-  <h2>Сеть / MQTT</h2>
-  <form id="networkForm">
-    <div class="row2">
-      <div>
-        <label>Адрес брокера MQTT</label>
-        <input type="text" id="mqtt_host" placeholder="например, 192.168.1.10">
-      </div>
-      <div>
-        <label>Порт</label>
-        <input type="number" id="mqtt_port" placeholder="1883">
-      </div>
-    </div>
-    <div class="row2">
-      <div>
-        <label>Пользователь</label>
-        <input type="text" id="mqtt_user" autocomplete="off">
-      </div>
-      <div>
-        <label>Пароль</label>
-        <input type="password" id="mqtt_pass" autocomplete="new-password" placeholder="оставьте пустым, чтобы не менять">
-      </div>
-    </div>
-    <label>Базовый топик</label>
-    <input type="text" id="mqtt_topic" placeholder="humidino">
-    <div class="hint" id="mqttPassHint"></div>
-    <button type="submit">Сохранить<span class="saved-flash" id="networkSaved">✓ применено</span></button>
-  </form>
-</section>
-
 <script>
 const zoneNames = {
   crawl_intake: "Приточка подпола",
@@ -178,7 +148,6 @@ const bannerColor = {
 const modeText = { auto: "АВТО", manual_on: "РУЧНОЕ ВКЛ", manual_off: "РУЧНОЕ ВЫКЛ" };
 
 let currentMode = "auto";
-let mqttPassSet = false;
 
 function fmtMinRuntime(ms) { return Math.round(ms / 60000); }
 
@@ -327,40 +296,9 @@ document.getElementById('saveAsPresetBtn').addEventListener('click', async () =>
   loadPresets();
 });
 
-// --- Сеть / MQTT ---
-async function loadNetwork() {
-  const r = await fetch('/api/network');
-  const n = await r.json();
-  document.getElementById('mqtt_host').value = n.mqtt_host || '';
-  document.getElementById('mqtt_port').value = n.mqtt_port || 1883;
-  document.getElementById('mqtt_user').value = n.mqtt_user || '';
-  document.getElementById('mqtt_topic').value = n.mqtt_topic || 'humidino';
-  mqttPassSet = !!n.mqtt_pass_set;
-  document.getElementById('mqttPassHint').textContent = mqttPassSet
-    ? 'Пароль уже сохранён на устройстве. Поле оставлено пустым намеренно — заполните, только если хотите его сменить.'
-    : 'Пароль не задан.';
-}
-
-document.getElementById('networkForm').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const body = {
-    mqtt_host: document.getElementById('mqtt_host').value,
-    mqtt_port: parseInt(document.getElementById('mqtt_port').value || '1883', 10),
-    mqtt_user: document.getElementById('mqtt_user').value,
-    mqtt_topic: document.getElementById('mqtt_topic').value,
-  };
-  const pass = document.getElementById('mqtt_pass').value;
-  if (pass) body.mqtt_pass = pass;
-  await fetch('/api/network', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-  document.getElementById('mqtt_pass').value = '';
-  flash('networkSaved');
-  loadNetwork();
-});
-
 refreshState();
 loadSettings();
 loadPresets();
-loadNetwork();
 setInterval(refreshState, 3000);
 </script>
 </body>
