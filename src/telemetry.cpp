@@ -19,14 +19,14 @@ void buildStateJson(JsonDocument& doc) {
     relay["state"] = static_cast<int>(s.relay.state);      // числовой код, для обратной совместимости
     relay["state_str"] = toString(s.relay.state);           // машиночитаемый id, напр. "locked_freeze"
 
-    static const char* kKeys[] = {"crawl_intake", "crawl_middle", "crawl_corner", "outside"};
+    static const char* kKeys[] = {"crawl_intake", "outside"};
     JsonObject zones = doc["zones"].to<JsonObject>();
-    for (size_t i = 0; i < 4; i++) {
+    for (size_t i = 0; i < static_cast<size_t>(SensorId::Count); i++) {
         const SensorReading& r = s.readings[i];
         JsonObject z = zones[kKeys[i]].to<JsonObject>();
         z["temp_c"] = r.temperatureC;
         z["rh_pct"] = r.humidityPct;
-        if (i < 3) {  // точка росы имеет смысл только для трёх зон подпола
+        if (i == static_cast<size_t>(SensorId::CrawlspaceIntake)) {  // точка росы имеет смысл только для подпола
             z["dew_c"] = r.dewPointC;
             z["abs_h_gm3"] = r.absHumidityGm3;
         }
