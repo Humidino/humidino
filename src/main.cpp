@@ -6,6 +6,7 @@
 #include "display.h"
 #include "network.h"
 #include "relay.h"
+#include "run_log.h"
 #include "sensors.h"
 #include "settings_store.h"
 #include "shared_state.h"
@@ -17,6 +18,7 @@ void setup() {
     Watchdog::begin();
     ShaState::begin();
     Settings::begin();
+    RunLog::begin();  // до Relay::begin() — controlTask может записать первый цикл почти сразу после старта
 
     ShaState::updateSettings(Settings::load());
 

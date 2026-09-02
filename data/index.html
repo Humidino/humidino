@@ -58,6 +58,22 @@
   .hint { font-size:12px; color:var(--muted); margin-top:6px; }
   .saved-flash { font-size:12px; color:var(--accent); margin-left:10px; opacity:0; transition:opacity .2s; }
   .saved-flash.show { opacity:1; }
+
+  /* --- Аналитика / журнал запусков --- */
+  .stats-cards { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; }
+  .stats-card { background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px; }
+  .stats-card .num { font-size:22px; font-weight:700; }
+  .stats-card .lbl { font-size:12px; color:var(--muted); margin-top:2px; }
+  #historyTimeWarning { display:none; font-size:12px; color:var(--warn); margin-bottom:10px; }
+  #historyChart { margin-bottom:12px; }
+  .history-row { padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .history-row:last-child { border-bottom:none; }
+  .history-top { display:flex; align-items:center; gap:8px; }
+  .history-time { font-weight:600; }
+  .history-dur { color:var(--accent2); }
+  .history-reason { color:var(--muted); margin-left:auto; font-size:12px; }
+  .history-zones { display:flex; flex-direction:column; gap:2px; margin-top:3px; color:var(--muted); font-size:12px; }
+  #historyEmpty { color:var(--muted); font-size:13px; padding:6px 0; }
 </style>
 </head>
 <body>
@@ -126,6 +142,20 @@
     </div>
     <button type="submit">Сохранить<span class="saved-flash" id="settingsSaved">✓ сохранено</span></button>
   </form>
+</section>
+
+<section>
+  <h2>Аналитика и статистика</h2>
+  <div id="historyTimeWarning">Время устройства ещё не синхронизировано по NTP (нужен доступ в интернет) — метки времени недавних запусков могут быть недоступны.</div>
+  <div class="stats-cards">
+    <div class="stats-card"><div class="num" id="statRunsToday">--</div><div class="lbl">запусков сегодня</div></div>
+    <div class="stats-card"><div class="num" id="statRuntimeToday">--</div><div class="lbl">работы сегодня</div></div>
+    <div class="stats-card"><div class="num" id="statRunsTotal">--</div><div class="lbl">запусков всего</div></div>
+    <div class="stats-card"><div class="num" id="statLogCount">--</div><div class="lbl">записей в журнале</div></div>
+  </div>
+  <div id="historyChart"></div>
+  <div id="historyEmpty">Пока нет ни одного запуска</div>
+  <div id="historyRows"></div>
 </section>
 
 <script>
@@ -294,10 +324,161 @@ document.getElementById('saveAsPresetBtn').addEventListener('click', async () =>
   loadPresets();
 });
 
+// --- Аналитика / журнал запусков ---
+const stopReasonText = {
+  hysteresis_reached: 'По графику (влажность в норме)',
+  manual_off: 'Выключено вручную',
+  locked_freeze: 'Прервано: защита от замерзания',
+  locked_condensation: 'Прервано: защита от конденсата',
+  sensor_fault: 'Прервано: ошибка датчика',
+  interrupted: 'Прервано перезагрузкой устройства',
+};
+const kHistoryFetchLimit = 150;  // хватает и на таблицу последних записей, и на 14-дневный график (см. web_server.cpp: потолок 200)
+
+function fmtDurationSec(sec) {
+  if (!sec) return '—';
+  const m = Math.round(sec / 60);
+  if (m < 60) return `${m} мин`;
+  return `${Math.floor(m / 60)} ч ${m % 60} мин`;
+}
+
+function fmtEpoch(epoch) {
+  if (!epoch) return '—';
+  return new Date(epoch * 1000).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtValue(v, digits = 1) {
+  return (v === null || v === undefined || Number.isNaN(v)) ? '—' : v.toFixed(digits);
+}
+
+function localDateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function loadHistorySummary() {
+  try {
+    const r = await fetch('/api/history/summary');
+    const s = await r.json();
+    document.getElementById('statRunsToday').textContent = s.time_synced ? s.runs_today : '—';
+    document.getElementById('statRuntimeToday').textContent = s.time_synced ? fmtDurationSec(s.runtime_today_s) : '—';
+    document.getElementById('statRunsTotal').textContent = s.runs_total;
+    document.getElementById('statLogCount').textContent = `${s.log_count}/${s.log_capacity}`;
+    document.getElementById('historyTimeWarning').style.display = s.time_synced ? 'none' : '';
+  } catch (e) { /* повторится на следующем тике */ }
+}
+
+// Простая столбчатая диаграмма "запусков в день" за последние 14 дней —
+// без внешних библиотек, инлайновый SVG (как значок вентилятора выше).
+function renderDayChart(records) {
+  const days = [];
+  const counts = {};
+  const today = new Date();
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = localDateKey(d);
+    days.push({ key, label: String(d.getDate()).padStart(2, '0') });
+    counts[key] = 0;
+  }
+  for (const rec of records) {
+    if (!rec.start_epoch) continue;
+    const key = localDateKey(new Date(rec.start_epoch * 1000));
+    if (key in counts) counts[key]++;
+  }
+  const max = Math.max(1, ...Object.values(counts));
+  const width = 320, height = 64, barGap = 2, barW = width / days.length - barGap;
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', height);
+
+  days.forEach((day, i) => {
+    const c = counts[day.key];
+    const barH = (c / max) * (height - 16);
+    const x = i * (barW + barGap);
+    const rect = document.createElementNS(svgNS, 'rect');
+    rect.setAttribute('x', x);
+    rect.setAttribute('y', height - barH - 14);
+    rect.setAttribute('width', Math.max(1, barW));
+    rect.setAttribute('height', barH);
+    rect.setAttribute('rx', 1);
+    rect.setAttribute('fill', c > 0 ? '#3a7dd6' : '#2a323c');
+    svg.appendChild(rect);
+    if (c > 0) {
+      const countText = document.createElementNS(svgNS, 'text');
+      countText.setAttribute('x', x + barW / 2);
+      countText.setAttribute('y', height - barH - 17);
+      countText.setAttribute('font-size', '8');
+      countText.setAttribute('fill', '#8aa0b8');
+      countText.setAttribute('text-anchor', 'middle');
+      countText.textContent = c;
+      svg.appendChild(countText);
+    }
+    if (i % 2 === 0) {
+      const dayText = document.createElementNS(svgNS, 'text');
+      dayText.setAttribute('x', x + barW / 2);
+      dayText.setAttribute('y', height - 2);
+      dayText.setAttribute('font-size', '8');
+      dayText.setAttribute('fill', '#8aa0b8');
+      dayText.setAttribute('text-anchor', 'middle');
+      dayText.textContent = day.label;
+      svg.appendChild(dayText);
+    }
+  });
+
+  const container = document.getElementById('historyChart');
+  container.innerHTML = '';
+  container.appendChild(svg);
+}
+
+function renderHistoryRows(records) {
+  const rowsEl = document.getElementById('historyRows');
+  const emptyEl = document.getElementById('historyEmpty');
+  rowsEl.innerHTML = '';
+  if (records.length === 0) {
+    emptyEl.style.display = '';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  for (const rec of records.slice(0, 30)) {
+    const row = document.createElement('div');
+    row.className = 'history-row';
+    const reasonLabel = rec.in_progress ? 'Работает сейчас' : (stopReasonText[rec.stop_reason] || rec.stop_reason);
+    const durLabel = rec.in_progress ? 'идёт…' : fmtDurationSec(rec.duration_s);
+    row.innerHTML = `
+      <div class="history-top">
+        <span class="history-time">${fmtEpoch(rec.start_epoch)}</span>
+        <span class="history-dur">${durLabel}</span>
+        <span class="history-reason">${reasonLabel}</span>
+      </div>
+      <div class="history-zones">
+        <span>Подпол: ${fmtValue(rec.start.crawl_rh)}→${fmtValue(rec.end.crawl_rh)}%  ·  ${fmtValue(rec.start.crawl_temp_c)}→${fmtValue(rec.end.crawl_temp_c)}°C</span>
+        <span>Улица: ${fmtValue(rec.start.outside_rh)}→${fmtValue(rec.end.outside_rh)}%  ·  ${fmtValue(rec.start.outside_temp_c)}→${fmtValue(rec.end.outside_temp_c)}°C</span>
+      </div>`;
+    rowsEl.appendChild(row);
+  }
+}
+
+async function loadHistory() {
+  try {
+    const r = await fetch(`/api/history?limit=${kHistoryFetchLimit}`);
+    const records = await r.json();
+    renderDayChart(records);
+    renderHistoryRows(records);
+  } catch (e) { /* повторится на следующем тике */ }
+}
+
 refreshState();
 loadSettings();
 loadPresets();
+loadHistorySummary();
+loadHistory();
 setInterval(refreshState, 3000);
+setInterval(loadHistorySummary, 30000);
+setInterval(loadHistory, 30000);  // журнал меняется редко (минимум раз в MIN_RUNTIME_MS/MIN_PAUSE_MS) — незачем опрашивать чаще
 </script>
 </body>
 </html>
