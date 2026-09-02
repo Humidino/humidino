@@ -53,6 +53,14 @@ struct SensorContext {
     uint8_t sclPin;
     uint8_t consecutiveFailures = 0;
     SensorFilter filter;
+    // Датчик, который не отвечает даже после восстановления шины (не
+    // подключён физически), не должен опрашиваться на каждом цикле — иначе
+    // его таймауты на общей шине замедляют/блокируют опрос соседа, который
+    // реально подключён. offline=true снимает его с обычного темпа опроса
+    // до nextRetryMs, когда даётся редкая попытка проверить, не появился ли
+    // он снова.
+    bool offline = false;
+    uint32_t nextRetryMs = 0;
 };
 
 // У Adafruit_SHT31::begin(addr) нет параметра TwoWire — указатель на шину
@@ -69,15 +77,21 @@ constexpr size_t kSensorCount = sizeof(g_sensors) / sizeof(g_sensors[0]);
 // Сканирует шину и печатает найденные адреса в Serial — единственный способ
 // на месте отличить "физически ничего не отвечает" (обрыв/питание/подтяжки)
 // от "отвечает не на том адресе" (ADDR разведён не так, как ждёт прошивка).
+// Проверяем только реально используемые адреса SHT31 (0x44/0x45), а не все
+// 127 — на неподключённой/безподтяжечной шине каждая транзакция может
+// целиком съедать I2C_TRANSACTION_TIMEOUT_MS, и полный перебор 126 адресов
+// на обеих шинах превращает старт платы в многоминутное ожидание ещё до
+// того, как опросится хоть один реально подключённый датчик.
 void scanBus(const char* label, TwoWire& bus) {
     Serial.printf("I2C scan %s: ", label);
     bool found = false;
-    for (uint8_t addr = 1; addr < 127; addr++) {
+    for (uint8_t addr : {SHT31_ADDR_A, SHT31_ADDR_B}) {
         bus.beginTransmission(addr);
         if (bus.endTransmission() == 0) {
             Serial.printf("0x%02X ", addr);
             found = true;
         }
+        Watchdog::feed();
     }
     if (!found) Serial.print("(нет ответов)");
     Serial.println();
@@ -114,6 +128,15 @@ void recoverBusFor(SensorContext& failedCtx) {
     }
 }
 
+// Снимает датчик с обычного темпа опроса на SENSOR_OFFLINE_RETRY_MS —
+// вызывается, когда он не отвечает даже сразу после recoverBusFor. Без
+// этого физически не подключённый датчик продолжал бы конкурировать за
+// общую шину на каждом цикле опроса, замедляя соседа на этой же шине.
+void markOffline(SensorContext& ctx) {
+    ctx.offline = true;
+    ctx.nextRetryMs = millis() + SENSOR_OFFLINE_RETRY_MS;
+}
+
 void pollOneSensor(SensorContext& ctx) {
     float t = ctx.sht.readTemperature();
     float rh = ctx.sht.readHumidity();
@@ -123,6 +146,7 @@ void pollOneSensor(SensorContext& ctx) {
 
     if (ok) {
         ctx.consecutiveFailures = 0;
+        ctx.offline = false;
         ctx.filter.push(t, rh);
         float filteredT = ctx.filter.avgTemp();
         float filteredRh = ctx.filter.avgRh();
@@ -147,6 +171,17 @@ void pollOneSensor(SensorContext& ctx) {
 
         if (ctx.consecutiveFailures >= I2C_FAILURE_RECOVERY_THRESHOLD) {
             recoverBusFor(ctx);
+            // Один быстрый повтор сразу после восстановления шины — если
+            // датчик и теперь не отвечает, скорее всего он просто не
+            // подключён физически, и продолжать долбить шину каждые
+            // SENSOR_POLL_INTERVAL_MS смысла нет.
+            float retryT = ctx.sht.readTemperature();
+            float retryRh = ctx.sht.readHumidity();
+            if (isnan(retryT) || isnan(retryRh)) {
+                markOffline(ctx);
+            } else {
+                ctx.consecutiveFailures = 0;
+            }
         }
     }
     reading.lastUpdateMs = millis();
@@ -158,8 +193,25 @@ void sensorTask(void*) {
     initBuses();
 
     for (;;) {
+        uint32_t now = millis();
         for (auto& ctx : g_sensors) {
+            if (ctx.offline && now < ctx.nextRetryMs) {
+                // Молчащий датчик пропускаем без единой I2C-транзакции —
+                // иначе даже редкие таймауты на его адресе тормозили бы
+                // опрос остальных датчиков на общей шине.
+                Watchdog::feed();
+                continue;
+            }
             pollOneSensor(ctx);
+            if (ctx.offline) {
+                // Датчик остался офлайн после этой попытки (будь то плановый
+                // повтор раз в SENSOR_OFFLINE_RETRY_MS или ещё не дошедший до
+                // markOffline() свежий сбой) — сдвигаем окно следующей
+                // попытки вперёд. Без этого при уже истёкшем старом
+                // nextRetryMs датчик опрашивался бы на каждом цикле, а не
+                // раз в SENSOR_OFFLINE_RETRY_MS.
+                ctx.nextRetryMs = now + SENSOR_OFFLINE_RETRY_MS;
+            }
             // Кормим watchdog после каждого датчика, а не только в конце
             // прохода по всем четырём — иначе время ожидания зависшего/
             // отключённого датчика на одной шине суммируется с остальными и

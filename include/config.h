@@ -51,6 +51,9 @@ enum class SensorId : uint8_t {
 constexpr uint32_t SENSOR_POLL_INTERVAL_MS  = 3000;  // 3000 мс = 3 с — период опроса датчиков
 constexpr uint8_t  MOVING_AVG_WINDOW        = 5;      // окно скользящего среднего, отсчётов
 constexpr uint8_t  I2C_FAILURE_RECOVERY_THRESHOLD = 3;  // подряд неудач до восстановления шины
+constexpr uint32_t SENSOR_OFFLINE_RETRY_MS  = 60UL * 1000;  // 60 с — как часто переопрашивать датчик,
+                                                             // который не отвечает даже после восстановления шины
+                                                             // (например, физически не подключён)
 
 constexpr uint32_t CONTROL_EVAL_INTERVAL_MS = 1000;   // 1000 мс = 1 с — период оценки состояния реле
 constexpr uint32_t MIN_RUNTIME_MS           = 10UL * 60 * 1000;  // 10 мин минимальной работы
