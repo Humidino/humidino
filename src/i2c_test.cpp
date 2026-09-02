@@ -24,8 +24,8 @@
 
 namespace {
 
-constexpr uint8_t PIN_SDA = 21;
-constexpr uint8_t PIN_SCL = 18;
+constexpr uint8_t PIN_SDA = 47;
+constexpr uint8_t PIN_SCL = 48;
 constexpr uint32_t I2C_CLOCK_HZ = 100000;
 constexpr uint16_t I2C_TIMEOUT_MS = 50;
 
