@@ -114,17 +114,20 @@ void setup() {
     Serial.println();
     Serial.println("=== i2c_test: изолированная проверка датчика на I2C0 (GPIO21/18) ===");
 
+    // Уровни проверяем ТОЛЬКО до Wire.begin(): pinMode() внутри
+    // printPinLevels() физически переключает матрицу GPIO обратно на простой
+    // цифровой вход, снимая пины с аппаратной I2C-периферии. Если вызвать
+    // это после Wire.begin(), любая последующая транзакция будет стучаться
+    // в пины, отключённые от контроллера I2C, и виснуть на таймауте шины —
+    // именно так тест раньше сам себе имитировал "датчик не отвечает".
     printPinLevels("до Wire.begin()");
 
     Wire.begin(PIN_SDA, PIN_SCL, I2C_CLOCK_HZ);
     Wire.setTimeOut(I2C_TIMEOUT_MS);
-
-    printPinLevels("после Wire.begin()");
 }
 
 void loop() {
     Serial.println("----------------------------------------------------------");
-    printPinLevels("перед опросом");
 
     uint8_t errA = probeAddr(SHT31_ADDR_A);
     uint8_t errB = probeAddr(SHT31_ADDR_B);
