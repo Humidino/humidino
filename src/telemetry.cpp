@@ -18,6 +18,7 @@ void buildStateJson(JsonDocument& doc) {
     relay["on"] = s.relay.relayOn;
     relay["state"] = static_cast<int>(s.relay.state);      // числовой код, для обратной совместимости
     relay["state_str"] = toString(s.relay.state);           // машиночитаемый id, напр. "locked_freeze"
+    relay["cycle_count"] = s.relay.cycleCount;               // сколько раз включалось за всё время (переживает перезагрузки)
 
     static const char* kKeys[] = {"crawl_intake", "outside"};
     JsonObject zones = doc["zones"].to<JsonObject>();

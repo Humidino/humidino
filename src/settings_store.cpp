@@ -155,4 +155,21 @@ void saveTouchCalibration(const uint16_t data[kTouchCalibrationValues]) {
     xSemaphoreGive(g_mutex);
 }
 
+uint32_t loadCycleCount() {
+    if (!lockPrefs()) return 0;
+    g_prefs.begin(kNamespace, true);
+    uint32_t count = g_prefs.getULong("cycle_count", 0);
+    g_prefs.end();
+    xSemaphoreGive(g_mutex);
+    return count;
+}
+
+void saveCycleCount(uint32_t count) {
+    if (!lockPrefs()) return;
+    g_prefs.begin(kNamespace, false);
+    g_prefs.putULong("cycle_count", count);
+    g_prefs.end();
+    xSemaphoreGive(g_mutex);
+}
+
 }  // namespace Settings

@@ -6,6 +6,7 @@
 
 #include "backlight.h"
 #include "config.h"
+#include "settings_store.h"
 #include "watchdog.h"
 
 namespace {
@@ -23,6 +24,7 @@ public:
         status_ = RelayStatus{};
         status_.stateEnteredMs = millis();
         status_.lastOffMs = status_.stateEnteredMs - initialMinPauseMs - 1;
+        status_.cycleCount = Settings::loadCycleCount();
     }
 
     void update(const SensorReading readings[static_cast<size_t>(SensorId::Count)], const RuntimeSettings& cfg, uint32_t nowMs) {
@@ -113,6 +115,8 @@ private:
             status_.relayOn = shouldRun;
             if (shouldRun) {
                 status_.lastOnMs = nowMs;
+                status_.cycleCount++;
+                Settings::saveCycleCount(status_.cycleCount);
             } else {
                 status_.lastOffMs = nowMs;
             }
@@ -144,23 +148,6 @@ namespace Relay {
 
 void begin() {
     xTaskCreatePinnedToCore(controlTask, "controlTask", 3072, nullptr, 4, nullptr, 0);
-}
-
-const char* bannerText(RelayControlState state) {
-    switch (state) {
-        case RelayControlState::Running:
-            return "РАБОТА";
-        case RelayControlState::Idle:
-        case RelayControlState::MinPauseHold:
-            return "ОЖИДАНИЕ";
-        case RelayControlState::LockedOutCondensation:
-            return "ЗАПРЕТ ПО КОНДЕНСАТУ";
-        case RelayControlState::LockedOutFreeze:
-            return "ЗАПРЕТ ПО МОРОЗУ";
-        case RelayControlState::LockedOutSensorFault:
-            return "ОШИБКА ДАТЧИКА";
-    }
-    return "?";
 }
 
 const char* modeBadgeText(OperatingMode mode) {

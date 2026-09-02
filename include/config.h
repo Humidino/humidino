@@ -24,7 +24,7 @@ constexpr uint8_t PIN_I2C1_SCL = 48;
 
 constexpr uint8_t SHT31_ADDR_A = 0x44;
 constexpr uint8_t SHT31_ADDR_B = 0x45;
-constexpr uint32_t I2C_CLOCK_HZ = 100000;
+constexpr uint32_t I2C_CLOCK_HZ = 10000;
 constexpr uint16_t I2C_TRANSACTION_TIMEOUT_MS = 50;  // мс — таймаут одной I2C-транзакции (Wire.setTimeOut)
 
 // ============================================================================

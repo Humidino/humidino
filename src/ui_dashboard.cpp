@@ -25,6 +25,7 @@ lv_obj_t* g_ramLabel;
 lv_obj_t* g_modeLabel;
 lv_obj_t* g_banner;
 lv_obj_t* g_bannerLabel;
+lv_obj_t* g_cycleCountLabel;
 lv_obj_t* g_spinner;  // видна и крутится только пока реле включено — см. update()
 lv_obj_t* g_modeButtons[3];  // Авто/Вкл/Выкл, индекс соответствует OperatingMode
 ZonePanelWidgets g_panels[static_cast<size_t>(SensorId::Count)];
@@ -87,21 +88,27 @@ ZonePanelWidgets buildZoneRow(lv_obj_t* parent, const char* title, bool hasDew) 
     lv_obj_t* titleLabel = lv_label_create(row);
     lv_obj_set_style_text_font(titleLabel, &font_ru_14, 0);
     lv_label_set_text(titleLabel, title);
-    lv_obj_set_width(titleLabel, LV_PCT(30));
+    lv_obj_set_width(titleLabel, LV_PCT(22));
     lv_label_set_long_mode(titleLabel, LV_LABEL_LONG_DOT);
 
     ZonePanelWidgets w{};
 
+    // 38%, а не прежние 28% — строка вида "-45.0 °C  100.0 %" (крайние
+    // значения SHT31) на font_ru_20 в 28% ширины переносилась на вторую
+    // строку вместо аккуратного усечения многоточием: LV_LABEL_LONG_DOT
+    // обрезает только когда высота объекта ограничена одной строкой, а не
+    // при авто-высоте внутри flex-строки — так что реальная защита от
+    // переноса здесь именно ширина, а не сам long_mode.
     w.value = lv_label_create(row);
     lv_obj_set_style_text_font(w.value, &font_ru_20, 0);
     lv_label_set_text(w.value, "Нет данных");
-    lv_obj_set_width(w.value, LV_PCT(28));
+    lv_obj_set_width(w.value, LV_PCT(38));
     lv_label_set_long_mode(w.value, LV_LABEL_LONG_DOT);
 
     w.dew = lv_label_create(row);
     lv_obj_set_style_text_font(w.dew, &font_ru_14, 0);
     lv_label_set_text(w.dew, "");
-    lv_obj_set_width(w.dew, LV_PCT(30));
+    lv_obj_set_width(w.dew, LV_PCT(24));
     lv_label_set_long_mode(w.dew, LV_LABEL_LONG_DOT);
     w.hasDew = hasDew;
 
@@ -128,7 +135,7 @@ void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r) {
     char buf[32];
 
     if (r.valid) {
-        snprintf(buf, sizeof(buf), "%.1f °C  %.1f %%", r.temperatureC, r.humidityPct);
+        snprintf(buf, sizeof(buf), "%.1f °C %.1f%%", r.temperatureC, r.humidityPct);
         lv_label_set_text(w.value, buf);
 
         if (w.hasDew) {
@@ -146,19 +153,13 @@ void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r) {
     lv_label_set_text(w.errBadge, r.error ? "ERR" : "");
 }
 
-lv_color_t bannerColorFor(RelayControlState state) {
-    switch (state) {
-        case RelayControlState::Running:
-            return lv_color_hex(0x2E8B45);  // зелёный
-        case RelayControlState::LockedOutCondensation:
-        case RelayControlState::LockedOutFreeze:
-        case RelayControlState::LockedOutSensorFault:
-            return lv_color_hex(0xC97A1E);  // оранжевый
-        case RelayControlState::Idle:
-        case RelayControlState::MinPauseHold:
-        default:
-            return lv_color_hex(0x3A4A5A);  // серо-синий
-    }
+// Баннер намеренно не показывает причину простоя (мороз/конденсат/сбой
+// датчика) — только сам факт, крутится вентилятор сейчас или нет. Причину
+// при необходимости видно в веб-интерфейсе (toString(RelayControlState) в
+// JSON-API), а главный экран платы держим простым и однозначным.
+lv_color_t bannerColorFor(bool relayOn) {
+    return relayOn ? lv_color_hex(0x2E8B45)    // зелёный
+                   : lv_color_hex(0x3A4A5A);   // серо-синий
 }
 
 }  // namespace
@@ -226,21 +227,44 @@ void build(lv_obj_t* parent) {
         g_panels[i] = buildZoneRow(list, kZoneTitles[i], zoneHasDewPoint(id));
     }
 
-    // --- Баннер статуса ---
+    // --- Баннер статуса: ВКЛ/ВЫКЛ сверху, счётчик запусков снизу ---
     g_banner = lv_obj_create(scr);
-    lv_obj_set_size(g_banner, LV_PCT(100), 56);
+    lv_obj_set_size(g_banner, LV_PCT(100), 64);
+    lv_obj_set_flex_flow(g_banner, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(g_banner, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_flex_flow(g_banner, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_row(g_banner, 2, 0);
 
-    g_spinner = lv_spinner_create(g_banner);
+    lv_obj_t* statusRow = lv_obj_create(g_banner);
+    lv_obj_set_size(statusRow, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(statusRow, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(statusRow, 0, 0);
+    lv_obj_set_style_pad_all(statusRow, 0, 0);
+    lv_obj_set_flex_flow(statusRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(statusRow, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    g_spinner = lv_spinner_create(statusRow);
     lv_obj_set_size(g_spinner, 32, 32);
     lv_spinner_set_anim_params(g_spinner, 1000, 200);  // оборот в секунду — визуально читается как "вращается"
     lv_obj_set_style_arc_color(g_spinner, lv_color_hex(0xFFFFFF), LV_PART_INDICATOR);
     lv_obj_add_flag(g_spinner, LV_OBJ_FLAG_HIDDEN);  // виден только пока реле включено, см. update()
 
-    g_bannerLabel = lv_label_create(g_banner);
-    lv_obj_set_style_text_font(g_bannerLabel, &font_ru_28_bold, 0);
-    lv_label_set_text(g_bannerLabel, "ОЖИДАНИЕ");
+    g_bannerLabel = lv_label_create(statusRow);
+    // font_ru_28_bold (использовался для коротких слов вроде "РАБОТА") не
+    // помещается в баннер с текстом "ВЕНТИЛЯТОР: ВЫКЛ" — обрезался по правому
+    // краю. font_ru_20 короче по ширине глифов и с запасом влезает во всю
+    // ширину экрана даже с русским текстом такой длины.
+    lv_obj_set_style_text_font(g_bannerLabel, &font_ru_20, 0);
+    // Тема LVGL по умолчанию красит текст лейблов в тёмный цвет, рассчитанный
+    // на светлый фон карточек — на нашем явно тёмном фоне баннера (см.
+    // bannerColorFor()) он становится почти нечитаемым. Задаём светлый цвет
+    // явно, а не полагаемся на тему.
+    lv_obj_set_style_text_color(g_bannerLabel, lv_color_hex(0xF0F0F0), 0);
+    lv_label_set_text(g_bannerLabel, "ВЕНТИЛЯТОР: ВЫКЛ");
+
+    g_cycleCountLabel = lv_label_create(g_banner);
+    lv_obj_set_style_text_font(g_cycleCountLabel, &font_ru_14, 0);
+    lv_obj_set_style_text_color(g_cycleCountLabel, lv_color_hex(0xC0C8D0), 0);
+    lv_label_set_text(g_cycleCountLabel, "Запусков всего: --");
 }
 
 void update() {
@@ -274,8 +298,11 @@ void update() {
                                    active ? lv_color_hex(0x2E6DA4) : lv_color_hex(0x3A4048), 0);
     }
 
-    lv_label_set_text(g_bannerLabel, Relay::bannerText(snapshot.relay.state));
-    lv_obj_set_style_bg_color(g_banner, bannerColorFor(snapshot.relay.state), 0);
+    lv_label_set_text(g_bannerLabel, snapshot.relay.relayOn ? "ВЕНТИЛЯТОР: ВКЛ" : "ВЕНТИЛЯТОР: ВЫКЛ");
+    lv_obj_set_style_bg_color(g_banner, bannerColorFor(snapshot.relay.relayOn), 0);
+
+    snprintf(buf, sizeof(buf), "Запусков всего: %lu", (unsigned long)snapshot.relay.cycleCount);
+    lv_label_set_text(g_cycleCountLabel, buf);
 
     if (snapshot.relay.relayOn) {
         lv_obj_clear_flag(g_spinner, LV_OBJ_FLAG_HIDDEN);

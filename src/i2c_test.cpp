@@ -24,9 +24,9 @@
 
 namespace {
 
-constexpr uint8_t PIN_SDA = 21;
-constexpr uint8_t PIN_SCL = 18;
-constexpr uint32_t I2C_CLOCK_HZ = 100000;
+constexpr uint8_t PIN_SDA = 47;  // временно I2C1 (улица) вместо 21 — см. диагностику уличного датчика
+constexpr uint8_t PIN_SCL = 48;  // временно I2C1 (улица) вместо 18
+constexpr uint32_t I2C_CLOCK_HZ = 1000000;
 constexpr uint16_t I2C_TIMEOUT_MS = 50;
 
 constexpr uint8_t SHT31_ADDR_A = 0x44;
@@ -112,7 +112,7 @@ void setup() {
     Serial.begin(115200);
     delay(500);
     Serial.println();
-    Serial.println("=== i2c_test: изолированная проверка датчика на I2C0 (GPIO21/18) ===");
+    Serial.printf("=== i2c_test: изолированная проверка датчика на SDA=GPIO%u SCL=GPIO%u ===\n", PIN_SDA, PIN_SCL);
 
     // Уровни проверяем ТОЛЬКО до Wire.begin(): pinMode() внутри
     // printPinLevels() физически переключает матрицу GPIO обратно на простой
