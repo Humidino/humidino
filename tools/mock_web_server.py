@@ -78,9 +78,7 @@ def build_state():
         "free_heap": 210000 + random.randint(-5000, 5000),
         "relay": {"on": state_str == "running", "state_str": state_str},
         "zones": {
-            "crawl_intake": fake_zone(18 + wobble * 0.2, 74, True),
-            "crawl_middle": fake_zone(17.8 + wobble * 0.2, 75, True, error=(int(elapsed) % 30 < 3)),
-            "crawl_corner": fake_zone(17.5 + wobble * 0.2, 76, True),
+            "crawl_intake": fake_zone(18 + wobble * 0.2, 74, True, error=(int(elapsed) % 30 < 3)),
             "outside": fake_zone(9 + wobble, 55, False),
         },
     }
