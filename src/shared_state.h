@@ -51,6 +51,10 @@ struct RelayStatus {
     uint32_t stateEnteredMs = 0;
     uint32_t lastOnMs = 0;
     uint32_t lastOffMs = 0;
+    // Сколько раз реле включалось за всё время жизни устройства (не за
+    // текущую сессию) — переживает перезагрузки, см. Settings::loadCycleCount()
+    // в settings_store.h.
+    uint32_t cycleCount = 0;
 };
 
 struct RuntimeSettings {

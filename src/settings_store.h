@@ -54,4 +54,10 @@ constexpr size_t kTouchCalibrationValues = 5;
 bool loadTouchCalibration(uint16_t out[kTouchCalibrationValues]);
 void saveTouchCalibration(const uint16_t data[kTouchCalibrationValues]);
 
+// Счётчик включений реле за всё время жизни устройства — переживает
+// перезагрузки (в отличие от RelayStatus в оперативной памяти). Пишется в
+// момент каждого включения, см. RelayController::transitionTo() в relay.cpp.
+uint32_t loadCycleCount();
+void saveCycleCount(uint32_t count);
+
 }  // namespace Settings
