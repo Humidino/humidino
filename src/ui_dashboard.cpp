@@ -97,7 +97,10 @@ bool zoneHasComfortFace(SensorId id) {
 enum class ComfortMood : uint8_t { Ideal, Good, High, VeryHigh };
 
 ComfortMood comfortMoodFor(float humidityPct, float targetPercent, float hysteresisPercent) {
-    if (humidityPct <= targetPercent - hysteresisPercent) return ComfortMood::Ideal;
+    // Строго "<", а не "<=" — relay.cpp останавливает реле по тому же
+    // сравнению (belowHysteresis = crawlRh < target-hysteresis), так что на
+    // самой границе реле ещё работает и лицо не должно уже улыбаться.
+    if (humidityPct < targetPercent - hysteresisPercent) return ComfortMood::Ideal;
     if (humidityPct <= targetPercent) return ComfortMood::Good;
     if (humidityPct <= targetPercent + hysteresisPercent) return ComfortMood::High;
     return ComfortMood::VeryHigh;
@@ -259,7 +262,8 @@ void formatUptime(char* out, size_t outSize, uint32_t ms) {
               (unsigned long)mins);
 }
 
-void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r, const RuntimeSettings& settings) {
+void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r, const RuntimeSettings& settings,
+                      bool relayOn) {
     char buf[32];
 
     if (r.valid) {
@@ -287,7 +291,16 @@ void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r, const Ru
         // заблуждение.
         if (r.valid && !r.error) {
             lv_obj_clear_flag(w.face.face, LV_OBJ_FLAG_HIDDEN);
-            applyComfortMood(w.face, comfortMoodFor(r.humidityPct, settings.rhTargetPercent, settings.hysteresisPercent));
+            ComfortMood mood =
+                comfortMoodFor(r.humidityPct, settings.rhTargetPercent, settings.hysteresisPercent);
+            // Реле умеет продолжать работать некоторое время уже после того,
+            // как влажность опустилась ниже порога (minRuntimeMs в
+            // relay.cpp защищает его от износа при частых включениях) — всё
+            // это время лицо не должно радоваться раньше вентилятора.
+            if (relayOn && static_cast<uint8_t>(mood) < static_cast<uint8_t>(ComfortMood::High)) {
+                mood = ComfortMood::High;
+            }
+            applyComfortMood(w.face, mood);
         } else {
             lv_obj_add_flag(w.face.face, LV_OBJ_FLAG_HIDDEN);
         }
@@ -413,7 +426,7 @@ void update() {
     if (!ShaState::getSnapshot(snapshot)) return;
 
     for (size_t i = 0; i < static_cast<size_t>(SensorId::Count); i++) {
-        updateZonePanel(g_panels[i], snapshot.readings[i], snapshot.settings);
+        updateZonePanel(g_panels[i], snapshot.readings[i], snapshot.settings, snapshot.relay.relayOn);
     }
 
     char buf[48];
