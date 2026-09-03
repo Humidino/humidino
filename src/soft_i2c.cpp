@@ -48,13 +48,14 @@ void SoftI2C::start() {
     sclLow();
 }
 
-void SoftI2C::stop() {
+bool SoftI2C::stop() {
     sdaLow();
     delayMicroseconds(halfPeriodUs_);
-    sclWaitHigh();
+    bool ok = sclWaitHigh();
     delayMicroseconds(halfPeriodUs_);
     sdaRelease();
     delayMicroseconds(halfPeriodUs_);
+    return ok;
 }
 
 bool SoftI2C::writeByte(uint8_t b) {
@@ -76,12 +77,12 @@ bool SoftI2C::writeByte(uint8_t b) {
     return ack;
 }
 
-uint8_t SoftI2C::readByte(bool ack) {
-    uint8_t b = 0;
+bool SoftI2C::readByte(uint8_t& b, bool ack) {
+    b = 0;
     sdaRelease();
     for (uint8_t i = 0; i < 8; i++) {
         delayMicroseconds(halfPeriodUs_);
-        sclWaitHigh();
+        if (!sclWaitHigh()) return false;
         b = static_cast<uint8_t>((b << 1) | (digitalRead(sda_) == HIGH ? 1 : 0));
         delayMicroseconds(halfPeriodUs_);
         sclLow();
@@ -90,27 +91,32 @@ uint8_t SoftI2C::readByte(bool ack) {
     // сообщает ведомому, что это конец чтения).
     if (ack) sdaLow(); else sdaRelease();
     delayMicroseconds(halfPeriodUs_);
-    sclWaitHigh();
+    if (!sclWaitHigh()) return false;
     delayMicroseconds(halfPeriodUs_);
     sclLow();
     sdaRelease();
-    return b;
+    return true;
 }
 
 bool SoftI2C::writeBytes(uint8_t addr, const uint8_t* data, size_t len) {
     start();
     bool ok = writeByte(static_cast<uint8_t>(addr << 1));
     for (size_t i = 0; ok && i < len; i++) ok = writeByte(data[i]);
-    stop();
-    return ok;
+    bool stopOk = stop();
+    return ok && stopOk;
 }
 
 bool SoftI2C::readBytes(uint8_t addr, uint8_t* out, size_t len) {
     start();
     bool ok = writeByte(static_cast<uint8_t>((addr << 1) | 1));
     if (ok) {
-        for (size_t i = 0; i < len; i++) out[i] = readByte(i + 1 < len);
+        for (size_t i = 0; i < len; i++) {
+            if (!readByte(out[i], i + 1 < len)) {
+                ok = false;
+                break;
+            }
+        }
     }
-    stop();
-    return ok;
+    bool stopOk = stop();
+    return ok && stopOk;
 }

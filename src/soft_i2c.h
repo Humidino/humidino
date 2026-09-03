@@ -38,7 +38,7 @@ private:
     bool sclWaitHigh();
 
     void start();
-    void stop();
+    bool stop();
     bool writeByte(uint8_t b);  // true, если ведомый ответил ACK
-    uint8_t readByte(bool ack);
+    bool readByte(uint8_t& b, bool ack);
 };
