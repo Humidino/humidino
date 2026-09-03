@@ -17,6 +17,7 @@ namespace {
 // более чем достаточно, но при этом достаточно часто, чтобы подхватить смену
 // сразу после первой NTP-синхронизации после включения устройства.
 constexpr uint32_t kCheckIntervalMs = 10UL * 60 * 1000;
+constexpr uint32_t kSyncRetryIntervalMs = 1000;
 
 Season::Id g_current = Season::Id::Winter;
 bool g_haveCheckedOnce = false;
@@ -36,7 +37,8 @@ void applySeasonProfile(Season::Id season) {
 void seasonTask(void*) {
     Watchdog::registerCurrentTask();
     for (;;) {
-        if (TimeSync::isSynced()) {
+        const bool timeSynced = TimeSync::isSynced();
+        if (timeSynced) {
             Season::Id season = Season::forEpoch(TimeSync::nowEpoch());
             bool changed = !g_haveCheckedOnce || season != g_current;
             g_current = season;
@@ -46,7 +48,7 @@ void seasonTask(void*) {
             }
         }
         Watchdog::feed();
-        vTaskDelay(pdMS_TO_TICKS(kCheckIntervalMs));
+        vTaskDelay(pdMS_TO_TICKS(timeSynced ? kCheckIntervalMs : kSyncRetryIntervalMs));
     }
 }
 

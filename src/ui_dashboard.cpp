@@ -312,7 +312,12 @@ void update() {
     lv_label_set_text(g_ramLabel, buf);
 
     lv_label_set_text(g_modeLabel, Relay::modeBadgeText(snapshot.settings.mode));
-    lv_label_set_text(g_seasonLabel, seasonRuLabel(Season::current()));
+    if (snapshot.settings.seasonAutoEnabled) {
+        lv_label_set_text(g_seasonLabel, seasonRuLabel(Season::current()));
+        lv_obj_clear_flag(g_seasonLabel, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(g_seasonLabel, LV_OBJ_FLAG_HIDDEN);
+    }
 
     for (size_t i = 0; i < 3; i++) {
         bool active = (i == static_cast<size_t>(snapshot.settings.mode));

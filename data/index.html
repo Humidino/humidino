@@ -271,11 +271,17 @@ async function loadSettings() {
 // кнопки режима выше). Если автосезон только что включили, устройство сразу
 // подставляет пороги текущего сезона — перечитываем форму, чтобы показать их.
 document.getElementById('season_auto').addEventListener('change', async (ev) => {
-  await fetch('/api/settings', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ season_auto: ev.target.checked }),
-  });
-  loadSettings();
+  try {
+    const response = await fetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ season_auto: ev.target.checked }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    await loadSettings();
+  } catch (e) {
+    await loadSettings().catch(() => {});
+    alert('Не удалось сохранить настройки');
+  }
 });
 
 function flash(id) {

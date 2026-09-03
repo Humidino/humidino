@@ -50,9 +50,8 @@ settings = {
 
 # Совпадает с Season::forLocalMonth() в src/season.cpp (профили под климат
 # Лотошино, МО — см. docs/SEASONAL_LOTOSHINO.md): дек-фев зима, мар-май
-# весна, июн-авг лето, сен-ноя осень. Здесь просто берём реальный текущий
-# месяц хоста — для мок-сервера этого достаточно, честная симуляция NTP не
-# нужна.
+# весна, июн-авг лето, сен-ноя осень. Как и прошивка, мок переводит текущую
+# UTC-эпоху в локальное время с помощью LOCAL_TZ_OFFSET_SEC.
 SEASON_BY_MONTH = {
     12: "winter", 1: "winter", 2: "winter",
     3: "spring", 4: "spring", 5: "spring",
@@ -62,7 +61,8 @@ SEASON_BY_MONTH = {
 
 
 def current_season():
-    return SEASON_BY_MONTH[time.localtime().tm_mon]
+    local_epoch = time.time() + LOCAL_TZ_OFFSET_SEC
+    return SEASON_BY_MONTH[time.gmtime(local_epoch).tm_mon]
 
 presets = [
     {"name": "Лето", "rh_target": 65.0, "hysteresis_pct": 5.0, "freeze_c": 2.0,
