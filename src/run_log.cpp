@@ -1,5 +1,6 @@
 #include "run_log.h"
 
+#include <algorithm>
 #include <Arduino.h>
 #include <LittleFS.h>
 #include <freertos/FreeRTOS.h>
@@ -123,8 +124,9 @@ const char* toString(StopReason reason) {
 }
 
 void begin() {
+    g_ready = false;
     if (g_mutex == nullptr) g_mutex = xSemaphoreCreateMutex();
-    LittleFS.begin(true);
+    if (!LittleFS.begin(false)) return;
     if (!lock()) return;
 
     bool needFresh = true;
@@ -150,13 +152,21 @@ void begin() {
     // посреди цикла. Закрываем её задним числом, а не оставляем висеть.
     if (g_header.openIndex != kNoOpenSlot) {
         RunRecord rec;
+        bool recordPersisted = false;
         if (readRecordAt(g_header.openIndex, rec)) {
-            rec.endEpoch = TimeSync::nowEpoch();  // обычно всё ещё 0 — WiFi/NTP на этом этапе загрузки ещё не готовы
-            rec.stopReason = StopReason::Interrupted;
-            writeRecordAt(g_header.openIndex, rec);
+            if (rec.stopReason != StopReason::Unknown) {
+                // Запись успела сохраниться до перезагрузки, а заголовок — нет.
+                recordPersisted = true;
+            } else {
+                rec.endEpoch = TimeSync::nowEpoch();  // обычно всё ещё 0 — WiFi/NTP на этом этапе загрузки ещё не готовы
+                rec.stopReason = StopReason::Interrupted;
+                recordPersisted = writeRecordAt(g_header.openIndex, rec);
+            }
         }
-        g_header.openIndex = kNoOpenSlot;
-        writeHeader();
+        if (recordPersisted) {
+            g_header.openIndex = kNoOpenSlot;
+            writeHeader();
+        }
     }
 
     g_ready = true;
@@ -196,6 +206,7 @@ void recordStop(const SensorReading readings[static_cast<size_t>(SensorId::Count
     }
 
     RunRecord rec;
+    bool recordPersisted = false;
     if (readRecordAt(g_header.openIndex, rec)) {
         const SensorReading& crawl = readings[static_cast<size_t>(SensorId::CrawlspaceIntake)];
         const SensorReading& outside = readings[static_cast<size_t>(SensorId::Outside)];
@@ -207,11 +218,13 @@ void recordStop(const SensorReading readings[static_cast<size_t>(SensorId::Count
         rec.endOutsideRh = outside.humidityPct;
         rec.endOutsideTempC = outside.temperatureC;
         rec.stopReason = reason;
-        writeRecordAt(g_header.openIndex, rec);
+        recordPersisted = writeRecordAt(g_header.openIndex, rec);
     }
 
-    g_header.openIndex = kNoOpenSlot;
-    writeHeader();
+    if (recordPersisted) {
+        g_header.openIndex = kNoOpenSlot;
+        writeHeader();
+    }
     xSemaphoreGive(g_mutex);
 }
 
@@ -226,21 +239,27 @@ Summary getSummary() {
         return s;
     }
 
-    uint32_t nowT = TimeSync::nowEpoch();
-    uint32_t localNow = nowT + static_cast<uint32_t>(LOCAL_TZ_OFFSET_SEC);
-    uint32_t todayLocalStart = localNow - (localNow % 86400) - static_cast<uint32_t>(LOCAL_TZ_OFFSET_SEC);
+    const uint32_t nowT = TimeSync::nowEpoch();
+    const int64_t localNow = static_cast<int64_t>(nowT) + LOCAL_TZ_OFFSET_SEC;
+    const uint32_t todayStart = static_cast<uint32_t>(localNow - (localNow % 86400) - LOCAL_TZ_OFFSET_SEC);
+    const uint32_t todayEnd = todayStart + 86400;
 
     File f = LittleFS.open(kLogPath, "r");
     if (f) {
-        // Записи в кольцевом буфере хронологичны по возрастанию — идём от
-        // самой свежей назад и останавливаемся на первой, что старше
-        // сегодняшней границы: всё, что дальше, тоже будет старше.
         RunRecord rec;
         for (uint32_t i = 0; i < g_header.count; i++) {
             if (!readFromOpenFile(f, slotFromNewest(i), rec)) break;
-            if (rec.startEpoch == 0 || rec.startEpoch < todayLocalStart) break;
-            s.runsToday++;
-            s.runtimeTodayMs += rec.durationMs;  // у ещё открытой записи durationMs==0 — досчитывается на клиенте по /api/state
+            if (rec.startEpoch == 0) continue;
+
+            if (rec.startEpoch >= todayStart && rec.startEpoch < todayEnd) s.runsToday++;
+
+            const uint32_t endEpoch = rec.stopReason == StopReason::Unknown ? nowT : rec.endEpoch;
+            if (endEpoch == 0) continue;
+            if (endEpoch <= todayStart) break;  // более старые циклы тоже не пересекают сегодняшний интервал
+
+            const uint32_t overlapStart = std::max(rec.startEpoch, todayStart);
+            const uint32_t overlapEnd = std::min(endEpoch, todayEnd);
+            if (overlapEnd > overlapStart) s.runtimeTodayMs += (overlapEnd - overlapStart) * 1000;
         }
         f.close();
     }

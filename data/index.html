@@ -333,7 +333,9 @@ const stopReasonText = {
   sensor_fault: 'Прервано: ошибка датчика',
   interrupted: 'Прервано перезагрузкой устройства',
 };
-const kHistoryFetchLimit = 150;  // хватает и на таблицу последних записей, и на 14-дневный график (см. web_server.cpp: потолок 200)
+const kHistoryPageSize = 200;  // потолок одного запроса в web_server.cpp; график догружает следующие страницы
+const kHistoryDays = 14;
+let deviceTzOffsetSec = null;
 
 function fmtDurationSec(sec) {
   if (!sec) return '—';
@@ -351,14 +353,24 @@ function fmtValue(v, digits = 1) {
   return (v === null || v === undefined || Number.isNaN(v)) ? '—' : v.toFixed(digits);
 }
 
-function localDateKey(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function deviceDayNumber(epochSec) {
+  return Math.floor((epochSec + deviceTzOffsetSec) / 86400);
+}
+
+function deviceDateKey(epochSec) {
+  return new Date(deviceDayNumber(epochSec) * 86400 * 1000).toISOString().slice(0, 10);
+}
+
+function chartWindowStartEpoch() {
+  return (deviceDayNumber(Date.now() / 1000) - (kHistoryDays - 1)) * 86400 - deviceTzOffsetSec;
 }
 
 async function loadHistorySummary() {
   try {
     const r = await fetch('/api/history/summary');
     const s = await r.json();
+    deviceTzOffsetSec = Number(s.local_tz_offset_sec);
+    if (!Number.isFinite(deviceTzOffsetSec)) deviceTzOffsetSec = 0;
     document.getElementById('statRunsToday').textContent = s.time_synced ? s.runs_today : '—';
     document.getElementById('statRuntimeToday').textContent = s.time_synced ? fmtDurationSec(s.runtime_today_s) : '—';
     document.getElementById('statRunsTotal').textContent = s.runs_total;
@@ -372,17 +384,15 @@ async function loadHistorySummary() {
 function renderDayChart(records) {
   const days = [];
   const counts = {};
-  const today = new Date();
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const key = localDateKey(d);
-    days.push({ key, label: String(d.getDate()).padStart(2, '0') });
+  const today = deviceDayNumber(Date.now() / 1000);
+  for (let i = kHistoryDays - 1; i >= 0; i--) {
+    const key = new Date((today - i) * 86400 * 1000).toISOString().slice(0, 10);
+    days.push({ key, label: key.slice(-2) });
     counts[key] = 0;
   }
   for (const rec of records) {
     if (!rec.start_epoch) continue;
-    const key = localDateKey(new Date(rec.start_epoch * 1000));
+    const key = deviceDateKey(rec.start_epoch);
     if (key in counts) counts[key]++;
   }
   const max = Math.max(1, ...Object.values(counts));
@@ -464,8 +474,19 @@ function renderHistoryRows(records) {
 
 async function loadHistory() {
   try {
-    const r = await fetch(`/api/history?limit=${kHistoryFetchLimit}`);
-    const records = await r.json();
+    if (deviceTzOffsetSec === null) await loadHistorySummary();
+    if (deviceTzOffsetSec === null) return;
+
+    const records = [];
+    const windowStart = chartWindowStartEpoch();
+    let offset = 0;
+    while (true) {
+      const r = await fetch(`/api/history?limit=${kHistoryPageSize}&offset=${offset}`);
+      const page = await r.json();
+      records.push(...page);
+      if (page.length < kHistoryPageSize || page.some(rec => rec.start_epoch && rec.start_epoch < windowStart)) break;
+      offset += page.length;
+    }
     renderDayChart(records);
     renderHistoryRows(records);
   } catch (e) { /* повторится на следующем тике */ }
@@ -474,8 +495,7 @@ async function loadHistory() {
 refreshState();
 loadSettings();
 loadPresets();
-loadHistorySummary();
-loadHistory();
+loadHistorySummary().then(loadHistory);
 setInterval(refreshState, 3000);
 setInterval(loadHistorySummary, 30000);
 setInterval(loadHistory, 30000);  // журнал меняется редко (минимум раз в MIN_RUNTIME_MS/MIN_PAUSE_MS) — незачем опрашивать чаще

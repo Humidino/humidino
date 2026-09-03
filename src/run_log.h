@@ -66,7 +66,7 @@ void recordStop(const SensorReading readings[static_cast<size_t>(SensorId::Count
 struct Summary {
     bool timeSynced = false;
     uint32_t runsToday = 0;        // только если timeSynced — иначе 0
-    uint32_t runtimeTodayMs = 0;     // сумма durationMs завершённых сегодня циклов
+    uint32_t runtimeTodayMs = 0;     // время пересечения всех циклов с сегодняшним локальным днём
     uint32_t runsTotal = 0;           // за всё время жизни устройства (Settings::loadCycleCount())
 };
 

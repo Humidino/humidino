@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <vector>
 
+#include "config.h"
 #include "run_log.h"
 #include "shared_state.h"
 
@@ -50,6 +51,7 @@ void buildSettingsJson(JsonDocument& doc) {
 void buildHistorySummaryJson(JsonDocument& doc) {
     RunLog::Summary s = RunLog::getSummary();
     doc["time_synced"] = s.timeSynced;
+    doc["local_tz_offset_sec"] = LOCAL_TZ_OFFSET_SEC;
     doc["runs_today"] = s.runsToday;
     doc["runtime_today_s"] = s.runtimeTodayMs / 1000;
     doc["runs_total"] = s.runsTotal;

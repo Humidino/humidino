@@ -55,7 +55,10 @@ void writePresetsJson(JsonDocument& doc, const std::vector<Settings::Preset>& pr
 namespace LocalWebServer {
 
 void begin() {
-    LittleFS.begin(true);
+    if (!LittleFS.begin(false)) {
+        Serial.println("LittleFS mount failed; web server not started");
+        return;
+    }
     loadWebPassword();
     g_server.serveStatic("/", LittleFS, "/")
         .setDefaultFile("index.html")

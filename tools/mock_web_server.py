@@ -27,6 +27,7 @@ from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 START_TIME = time.time()
+LOCAL_TZ_OFFSET_SEC = 3 * 3600
 
 # Строковые идентификаторы совпадают с ShaState::toString(RelayControlState)
 # в shared_state.cpp. Цикл нужен только для демонстрации — на реальном
@@ -152,11 +153,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif self.path == "/api/presets":
             self._send_json(presets)
         elif self.path.startswith("/api/history/summary"):
-            today_cutoff = time.time() - 24 * 3600
-            runs_today = sum(1 for r in FAKE_HISTORY if r["start_epoch"] >= today_cutoff)
-            runtime_today = sum(r["duration_s"] for r in FAKE_HISTORY if r["start_epoch"] >= today_cutoff)
+            now = int(time.time())
+            local_now = now + LOCAL_TZ_OFFSET_SEC
+            today_start = local_now - local_now % 86400 - LOCAL_TZ_OFFSET_SEC
+            today_end = today_start + 86400
+            runs_today = sum(1 for r in FAKE_HISTORY if today_start <= r["start_epoch"] < today_end)
+            runtime_today = sum(
+                max(0, min(now if r["in_progress"] else r["end_epoch"], today_end)
+                    - max(r["start_epoch"], today_start))
+                for r in FAKE_HISTORY
+            )
             self._send_json({
                 "time_synced": True,
+                "local_tz_offset_sec": LOCAL_TZ_OFFSET_SEC,
                 "runs_today": runs_today,
                 "runtime_today_s": runtime_today,
                 "runs_total": len(FAKE_HISTORY) + 340,  # имитация: счётчик за всё время шире, чем хранящийся журнал
