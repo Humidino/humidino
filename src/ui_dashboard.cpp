@@ -7,6 +7,7 @@
 #include "config.h"
 #include "fonts/fonts.h"
 #include "relay.h"
+#include "season.h"
 #include "settings_actions.h"
 #include "shared_state.h"
 
@@ -36,6 +37,7 @@ lv_obj_t* g_uptimeLabel;
 lv_obj_t* g_wifiLabel;
 lv_obj_t* g_ramLabel;
 lv_obj_t* g_modeLabel;
+lv_obj_t* g_seasonLabel;
 lv_obj_t* g_banner;
 lv_obj_t* g_bannerLabel;
 lv_obj_t* g_cycleCountLabel;
@@ -318,6 +320,18 @@ lv_color_t bannerColorFor(bool relayOn) {
                    : lv_color_hex(0x3A4A5A);   // серо-синий
 }
 
+// Сезон, под который сейчас подобраны пороги (см. season.h) — только для
+// информации на дашборде, не влияет на сам алгоритм осушения.
+const char* seasonRuLabel(Season::Id season) {
+    switch (season) {
+        case Season::Id::Winter: return "ЗИМА";
+        case Season::Id::Spring: return "ВЕСНА";
+        case Season::Id::Summer: return "ЛЕТО";
+        case Season::Id::Autumn: return "ОСЕНЬ";
+    }
+    return "?";
+}
+
 }  // namespace
 
 namespace UiDashboard {
@@ -351,6 +365,11 @@ void build(lv_obj_t* parent) {
     lv_obj_set_style_text_font(g_modeLabel, &font_ru_14, 0);
     lv_obj_set_style_text_color(g_modeLabel, lv_color_hex(0x8AA0B8), 0);
     lv_label_set_text(g_modeLabel, "АВТО");
+
+    g_seasonLabel = lv_label_create(statusBar);
+    lv_obj_set_style_text_font(g_seasonLabel, &font_ru_14, 0);
+    lv_obj_set_style_text_color(g_seasonLabel, lv_color_hex(0x8AA0B8), 0);
+    lv_label_set_text(g_seasonLabel, "");
 
     // --- Кнопки переключения режима (дублируют веб-интерфейс) ---
     lv_obj_t* modeRow = lv_obj_create(scr);
@@ -447,6 +466,12 @@ void update() {
     lv_label_set_text(g_ramLabel, buf);
 
     lv_label_set_text(g_modeLabel, Relay::modeBadgeText(snapshot.settings.mode));
+    if (snapshot.settings.seasonAutoEnabled) {
+        lv_label_set_text(g_seasonLabel, seasonRuLabel(Season::current()));
+        lv_obj_clear_flag(g_seasonLabel, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(g_seasonLabel, LV_OBJ_FLAG_HIDDEN);
+    }
 
     for (size_t i = 0; i < 3; i++) {
         bool active = (i == static_cast<size_t>(snapshot.settings.mode));

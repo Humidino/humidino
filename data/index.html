@@ -27,6 +27,18 @@
   #statusText { flex:1; }
   #bannerLabel { font-size:20px; font-weight:700; margin-bottom:2px; }
   #modeBadge { font-size:12px; color:rgba(255,255,255,.75); text-transform:uppercase; letter-spacing:.03em; }
+  #seasonBadge { font-size:12px; color:rgba(255,255,255,.55); text-transform:uppercase; letter-spacing:.03em; margin-top:2px; }
+
+  /* --- Автосезон --- */
+  .season-toggle { display:flex; align-items:center; gap:10px; margin-top:14px; padding-top:14px; border-top:1px solid var(--border); }
+  .season-toggle .label { flex:1; font-size:13px; }
+  .season-toggle .label .hint { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+  .switch { position:relative; display:inline-block; width:44px; height:24px; flex-shrink:0; }
+  .switch input { opacity:0; width:0; height:0; }
+  .switch .slider { position:absolute; inset:0; background:var(--panel2); border:1px solid var(--border); border-radius:24px; cursor:pointer; transition:.2s; }
+  .switch .slider::before { content:""; position:absolute; width:18px; height:18px; left:2px; top:2px; background:var(--text); border-radius:50%; transition:.2s; }
+  .switch input:checked + .slider { background:var(--accent2); border-color:var(--accent2); }
+  .switch input:checked + .slider::before { transform:translateX(20px); background:white; }
 
   /* --- Переключатель режима --- */
   .mode-switch { display:flex; gap:6px; }
@@ -95,6 +107,7 @@
     <div id="statusText">
       <div id="bannerLabel">—</div>
       <div id="modeBadge">АВТО</div>
+      <div id="seasonBadge"></div>
     </div>
   </div>
   <div class="mode-switch" style="margin-top:14px;">
@@ -141,6 +154,15 @@
       </div>
     </div>
     <button type="submit">Сохранить<span class="saved-flash" id="settingsSaved">✓ сохранено</span></button>
+    <div class="season-toggle">
+      <span class="label">Автосезон (Лотошино, МО)
+        <span class="hint">Сама подставляет пороги и тайминги выше под текущий календарный сезон — см. docs/SEASONAL_LOTOSHINO.md. Ручные значения выше при включённом автосезоне держатся только до ближайшей смены сезона.</span>
+      </span>
+      <label class="switch">
+        <input type="checkbox" id="season_auto">
+        <span class="slider"></span>
+      </label>
+    </div>
   </form>
 </section>
 
@@ -176,6 +198,7 @@ const bannerColor = {
   min_pause_hold: "#2a3542", locked_sensor_fault: "#5c1f1f",
 };
 const modeText = { auto: "АВТО", manual_on: "РУЧНОЕ ВКЛ", manual_off: "РУЧНОЕ ВЫКЛ" };
+const seasonText = { winter: "Зима", spring: "Весна", summer: "Лето", autumn: "Осень" };
 
 let currentMode = "auto";
 
@@ -191,6 +214,7 @@ async function refreshState() {
     const stateKey = s.relay.state_str || 'idle';
     document.getElementById('bannerLabel').textContent = bannerText[stateKey] ?? '?';
     document.getElementById('statusCard').style.background = bannerColor[stateKey] ?? '#2a3542';
+    document.getElementById('seasonBadge').textContent = 'Сезон: ' + (seasonText[s.season] || s.season || '—');
 
     const fan = document.getElementById('fanIcon');
     fan.classList.toggle('spinning', !!s.relay.on);
@@ -239,8 +263,26 @@ async function loadSettings() {
   document.getElementById('freeze_c').value = s.freeze_c;
   document.getElementById('min_runtime_min').value = fmtMinRuntime(s.min_runtime_ms);
   document.getElementById('min_pause_min').value = fmtMinRuntime(s.min_pause_ms);
+  document.getElementById('season_auto').checked = !!s.season_auto;
   setModeButtons(s.mode || 'auto');
 }
+
+// Отдельно от формы — переключается сразу, без нажатия "Сохранить" (как и
+// кнопки режима выше). Если автосезон только что включили, устройство сразу
+// подставляет пороги текущего сезона — перечитываем форму, чтобы показать их.
+document.getElementById('season_auto').addEventListener('change', async (ev) => {
+  try {
+    const response = await fetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ season_auto: ev.target.checked }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    await loadSettings();
+  } catch (e) {
+    await loadSettings().catch(() => {});
+    alert('Не удалось сохранить настройки');
+  }
+});
 
 function flash(id) {
   const el = document.getElementById(id);

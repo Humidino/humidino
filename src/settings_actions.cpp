@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "season.h"
+
 namespace SettingsActions {
 
 void applyRuntimeSettings(const RuntimeSettings& settings) {
@@ -30,6 +32,18 @@ bool applyPresetByName(const char* name, RuntimeSettings& outApplied) {
     applyRuntimeSettings(settings);
     outApplied = settings;
     return true;
+}
+
+RuntimeSettings withSeasonSyncOnEnable(const RuntimeSettings& previous, RuntimeSettings next) {
+    if (next.seasonAutoEnabled && !previous.seasonAutoEnabled) {
+        Settings::PresetValues profile = Season::profileFor(Season::current());
+        next.rhTargetPercent = profile.rhTargetPercent;
+        next.hysteresisPercent = profile.hysteresisPercent;
+        next.freezeProtectC = profile.freezeProtectC;
+        next.minRuntimeMs = profile.minRuntimeMs;
+        next.minPauseMs = profile.minPauseMs;
+    }
+    return next;
 }
 
 }  // namespace SettingsActions

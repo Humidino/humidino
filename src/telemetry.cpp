@@ -5,6 +5,7 @@
 
 #include "config.h"
 #include "run_log.h"
+#include "season.h"
 #include "shared_state.h"
 
 namespace Telemetry {
@@ -16,6 +17,11 @@ void buildStateJson(JsonDocument& doc) {
     doc["uptime_s"] = millis() / 1000;
     doc["wifi_rssi"] = s.wifiRssi;
     doc["free_heap"] = ESP.getFreeHeap();
+    // Определённый по календарю сезон (см. season.h) — чисто информационно,
+    // для бейджа на дашборде/веб-странице. Сами пороги, применённые ли
+    // сейчас автосезонные значения — в rh_target/etc. и в season_auto из
+    // buildSettingsJson() ниже.
+    doc["season"] = Season::toString(Season::current());
 
     JsonObject relay = doc["relay"].to<JsonObject>();
     relay["on"] = s.relay.relayOn;
@@ -49,6 +55,7 @@ void buildSettingsJson(JsonDocument& doc) {
     doc["min_runtime_ms"] = settings.minRuntimeMs;
     doc["min_pause_ms"] = settings.minPauseMs;
     doc["mode"] = toString(settings.mode);
+    doc["season_auto"] = settings.seasonAutoEnabled;
 }
 
 void buildHistorySummaryJson(JsonDocument& doc) {

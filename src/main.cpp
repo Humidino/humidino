@@ -7,6 +7,7 @@
 #include "network.h"
 #include "relay.h"
 #include "run_log.h"
+#include "season.h"
 #include "sensors.h"
 #include "settings_store.h"
 #include "shared_state.h"
@@ -24,6 +25,7 @@ void setup() {
 
     Sensors::begin();
     Relay::begin();
+    Season::begin();  // ждёт NTP-синхронизацию сама (см. season.h) — порядок относительно Network::begin() не важен
     Display::begin();
     Network::begin();
 
