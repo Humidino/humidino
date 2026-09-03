@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "fonts/fonts.h"
+#include "season.h"
 #include "settings_actions.h"
 #include "shared_state.h"
 
@@ -21,8 +22,20 @@ enum RowIndex {
 };
 
 lv_obj_t* g_spinboxes[kRowCount];
+lv_obj_t* g_seasonAutoSwitch;
+lv_obj_t* g_seasonNowLabel;
 lv_obj_t* g_savedFlash;
 lv_timer_t* g_flashTimer = nullptr;
+
+const char* seasonRuName(Season::Id season) {
+    switch (season) {
+        case Season::Id::Winter: return "зима";
+        case Season::Id::Spring: return "весна";
+        case Season::Id::Summer: return "лето";
+        case Season::Id::Autumn: return "осень";
+    }
+    return "?";
+}
 
 // x10 фиксированная точка на десятичных полях (влажность/гистерезис/°C);
 // минуты — целые.
@@ -101,7 +114,8 @@ lv_obj_t* buildRow(lv_obj_t* parent, const char* labelText, uint32_t digitCount,
 }
 
 void onSaveClicked(lv_event_t*) {
-    RuntimeSettings settings = ShaState::getSettings();  // сохраняем текущий mode как есть
+    RuntimeSettings previous = ShaState::getSettings();  // сохраняем текущий mode как есть
+    RuntimeSettings settings = previous;
     settings.rhTargetPercent =
         static_cast<float>(lv_spinbox_get_value(g_spinboxes[kRhTarget])) / kDecimalScale;
     settings.hysteresisPercent =
@@ -112,8 +126,13 @@ void onSaveClicked(lv_event_t*) {
         static_cast<uint32_t>(lv_spinbox_get_value(g_spinboxes[kMinRuntimeMin])) * 60000UL;
     settings.minPauseMs =
         static_cast<uint32_t>(lv_spinbox_get_value(g_spinboxes[kMinPauseMin])) * 60000UL;
+    settings.seasonAutoEnabled = lv_obj_has_state(g_seasonAutoSwitch, LV_STATE_CHECKED);
 
-    SettingsActions::applyRuntimeSettings(settings);
+    // Включили автосезон этим же сохранением — подставляем профиль текущего
+    // сезона сразу (см. SettingsActions::withSeasonSyncOnEnable), иначе поля
+    // выше и останутся тем, что было введено вручную, пока сезон не сменится.
+    SettingsActions::applyRuntimeSettings(SettingsActions::withSeasonSyncOnEnable(previous, settings));
+    UiSettingsScreen::refresh();  // если автосезон подставил свои цифры — тут же показать их на спинбоксах
     showSavedFlash();
 }
 
@@ -140,6 +159,29 @@ void build(lv_obj_t* parent) {
     // Мин. время работы/паузы, целые минуты 0-180
     g_spinboxes[kMinRuntimeMin] = buildRow(parent, "Мин. время работы, мин", 3, 0, 0, 180, 1);
     g_spinboxes[kMinPauseMin] = buildRow(parent, "Мин. пауза, мин", 3, 0, 0, 180, 1);
+
+    // --- Автосезон: подставляет пороги/тайминги выше сама, по календарю ---
+    // (профили под климат Лотошино, МО — см. docs/SEASONAL_LOTOSHINO.md).
+    // Значения полей выше при включённом автосезоне носят временный
+    // характер — их перезапишет ближайшая смена сезона, если не выключить.
+    lv_obj_t* seasonRow = lv_obj_create(parent);
+    lv_obj_set_size(seasonRow, LV_PCT(100), 40);
+    lv_obj_set_flex_flow(seasonRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(seasonRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_border_width(seasonRow, 0, 0);
+    lv_obj_set_style_pad_all(seasonRow, 2, 0);
+
+    lv_obj_t* seasonLbl = lv_label_create(seasonRow);
+    lv_obj_set_style_text_font(seasonLbl, &font_ru_14, 0);
+    lv_label_set_text(seasonLbl, "Автосезон (Лотошино, МО)");
+    lv_obj_set_flex_grow(seasonLbl, 1);
+
+    g_seasonNowLabel = lv_label_create(seasonRow);
+    lv_obj_set_style_text_font(g_seasonNowLabel, &font_ru_14, 0);
+    lv_obj_set_style_text_color(g_seasonNowLabel, lv_color_hex(0x8AA0B8), 0);
+    lv_label_set_text(g_seasonNowLabel, "");
+
+    g_seasonAutoSwitch = lv_switch_create(seasonRow);
 
     lv_obj_t* footer = lv_obj_create(parent);
     lv_obj_set_size(footer, LV_PCT(100), 44);
@@ -176,6 +218,13 @@ void refresh() {
                           static_cast<int32_t>(settings.minRuntimeMs / 60000UL));
     lv_spinbox_set_value(g_spinboxes[kMinPauseMin],
                           static_cast<int32_t>(settings.minPauseMs / 60000UL));
+
+    if (settings.seasonAutoEnabled) lv_obj_add_state(g_seasonAutoSwitch, LV_STATE_CHECKED);
+    else lv_obj_remove_state(g_seasonAutoSwitch, LV_STATE_CHECKED);
+
+    char seasonBuf[24];
+    snprintf(seasonBuf, sizeof(seasonBuf), "сейчас: %s", seasonRuName(Season::current()));
+    lv_label_set_text(g_seasonNowLabel, seasonBuf);
 }
 
 }  // namespace UiSettingsScreen

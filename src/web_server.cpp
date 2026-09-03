@@ -107,7 +107,8 @@ void begin() {
         "/api/settings", [](AsyncWebServerRequest* req, JsonVariant& json) {
             if (!requireAuthentication(req)) return;
             JsonObject body = json.as<JsonObject>();
-            RuntimeSettings settings = ShaState::getSettings();
+            RuntimeSettings previous = ShaState::getSettings();
+            RuntimeSettings settings = previous;
 
             if (body["rh_target"].is<float>()) settings.rhTargetPercent = body["rh_target"];
             if (body["hysteresis_pct"].is<float>()) settings.hysteresisPercent = body["hysteresis_pct"];
@@ -115,8 +116,12 @@ void begin() {
             if (body["min_runtime_ms"].is<uint32_t>()) settings.minRuntimeMs = body["min_runtime_ms"];
             if (body["min_pause_ms"].is<uint32_t>()) settings.minPauseMs = body["min_pause_ms"];
             if (body["mode"].is<const char*>()) settings.mode = operatingModeFromString(body["mode"]);
+            if (body["season_auto"].is<bool>()) settings.seasonAutoEnabled = body["season_auto"];
 
-            SettingsActions::applyRuntimeSettings(settings);
+            // Включили автосезон этим же запросом — подставляем профиль
+            // текущего сезона сразу, не дожидаясь плановой проверки (см.
+            // SettingsActions::withSeasonSyncOnEnable).
+            SettingsActions::applyRuntimeSettings(SettingsActions::withSeasonSyncOnEnable(previous, settings));
 
             JsonDocument resp;
             Telemetry::buildSettingsJson(resp);

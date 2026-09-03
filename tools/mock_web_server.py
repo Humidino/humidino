@@ -45,7 +45,24 @@ settings = {
     "min_runtime_ms": 10 * 60 * 1000,
     "min_pause_ms": 15 * 60 * 1000,
     "mode": "auto",
+    "season_auto": True,
 }
+
+# Совпадает с Season::forLocalMonth() в src/season.cpp (профили под климат
+# Лотошино, МО — см. docs/SEASONAL_LOTOSHINO.md): дек-фев зима, мар-май
+# весна, июн-авг лето, сен-ноя осень. Здесь просто берём реальный текущий
+# месяц хоста — для мок-сервера этого достаточно, честная симуляция NTP не
+# нужна.
+SEASON_BY_MONTH = {
+    12: "winter", 1: "winter", 2: "winter",
+    3: "spring", 4: "spring", 5: "spring",
+    6: "summer", 7: "summer", 8: "summer",
+    9: "autumn", 10: "autumn", 11: "autumn",
+}
+
+
+def current_season():
+    return SEASON_BY_MONTH[time.localtime().tm_mon]
 
 presets = [
     {"name": "Лето", "rh_target": 65.0, "hysteresis_pct": 5.0, "freeze_c": 2.0,
@@ -117,6 +134,7 @@ def build_state():
         "uptime_s": int(elapsed),
         "wifi_rssi": -55 + int(wobble),
         "free_heap": 210000 + random.randint(-5000, 5000),
+        "season": current_season(),
         "relay": {"on": state_str == "running", "state_str": state_str},
         "zones": {
             "crawl_intake": fake_zone(18 + wobble * 0.2, 74, True, error=(int(elapsed) % 30 < 3)),
