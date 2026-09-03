@@ -20,7 +20,7 @@ constexpr uint8_t PIN_I2C0_SCL = 18;
 // Шина I2C 1: улица + средняя зона подпола, Зона 2 (Wire1)
 // ============================================================================
 constexpr uint8_t PIN_I2C1_SDA = 47;
-constexpr uint8_t PIN_I2C1_SCL = 48;
+constexpr uint8_t PIN_I2C1_SCL = 8;
 
 constexpr uint8_t SHT31_ADDR_A = 0x44;
 constexpr uint8_t SHT31_ADDR_B = 0x45;
