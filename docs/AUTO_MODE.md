@@ -58,7 +58,7 @@
 
 ### 1. Исправность датчиков
 
-```
+```cpp
 sensorsHealthy = intake.valid && outside.valid && !intake.error && !outside.error
 ```
 
@@ -67,17 +67,18 @@ sensorsHealthy = intake.valid && outside.valid && !intake.error && !outside.erro
 
 ### 2. Защита от замерзания
 
-```
+```cpp
 freezeSafe = outside.temperatureC > freezeProtectC
 ```
 
-Если снаружи холоднее порога — `LockedOutFreeze`. Это единственная проверка,
-которая действует **безусловно**, даже в ручных режимах — физическая
+Если температура снаружи равна порогу или ниже — `LockedOutFreeze`.
+Это единственная проверка, которая действует **безусловно**, даже в
+ручных режимах — физическая
 безопасность конструкции важнее любой команды пользователя.
 
 ### 3. Защита от конденсата
 
-```
+```cpp
 condensationSafe = outside.absHumidityGm3 < crawlspaceAbsHumidityGm3
 ```
 
@@ -98,11 +99,15 @@ condensationSafe = outside.absHumidityGm3 < crawlspaceAbsHumidityGm3
   - прошло `minRuntimeMs` с момента включения, **и**
   - влажность подполья опустилась ниже `rhTargetPercent - hysteresisPercent`.
 
-**Если `Idle`:**
+**Если не `Running`:**
+- одна и та же логика применяется к `Idle`, `MinPauseHold` и после снятия любой
+  блокировки `LockedOut*`;
 - включается (`Running`), если влажность подполья выше `rhTargetPercent`
-  **и** прошло `minPauseMs` с последнего выключения;
-- если порог влажности превышен, но пауза ещё не прошла — `MinPauseHold`
-  (реле "хочет" включиться, но ждёт).
+  **и** с последнего выключения прошло строго больше `minPauseMs`;
+- если порог влажности превышен, но прошло не больше `minPauseMs`
+  (в том числе ровно `minPauseMs`) — `MinPauseHold` (реле "хочет"
+  включиться, но ждёт);
+- если порог влажности не превышен — `Idle`.
 
 Гистерезис и `minPauseMs`/`minRuntimeMs` не про безопасность, а про ресурс
 самого реле: не дать ему щёлкать слишком часто.

@@ -25,7 +25,7 @@
 namespace {
 
 constexpr uint8_t PIN_SDA = 47;  // временно I2C1 (улица) вместо 21 — см. диагностику уличного датчика
-constexpr uint8_t PIN_SCL = 8;  // временно I2C1 (улица) вместо 18
+constexpr uint8_t PIN_SCL = 8;  // временно I2C1 (улица) вместо 48
 constexpr uint32_t I2C_CLOCK_HZ = 10000;
 constexpr uint16_t I2C_TIMEOUT_MS = 50;
 

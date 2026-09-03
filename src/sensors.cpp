@@ -104,7 +104,7 @@ void initBuses() {
     Wire.setTimeOut(I2C_TRANSACTION_TIMEOUT_MS);
     Wire1.setTimeOut(I2C_TRANSACTION_TIMEOUT_MS);
     scanBus("Wire (I2C0, GPIO21/18)", Wire);
-    scanBus("Wire1 (I2C1, GPIO47/48)", Wire1);
+    scanBus("Wire1 (I2C1, GPIO47/8)", Wire1);
     for (auto& ctx : g_sensors) {
         ctx.sht.begin(ctx.addr);
     }
