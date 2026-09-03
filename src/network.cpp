@@ -5,6 +5,7 @@
 #include <freertos/task.h>
 
 #include "shared_state.h"
+#include "time_sync.h"
 #include "watchdog.h"
 #include "web_server.h"
 #include "wifi_provision.h"
@@ -16,6 +17,10 @@ void netTask(void*) {
         ShaState::updateWifi(false, 0);
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
+
+    // Журналу запусков (run_log.h) нужно реальное время для меток начала/
+    // конца циклов — запускаем SNTP сразу же, как только появилась сеть.
+    TimeSync::begin();
 
     Watchdog::registerCurrentTask();
     LocalWebServer::begin();

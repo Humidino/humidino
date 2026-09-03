@@ -55,7 +55,10 @@ void writePresetsJson(JsonDocument& doc, const std::vector<Settings::Preset>& pr
 namespace LocalWebServer {
 
 void begin() {
-    LittleFS.begin(true);
+    if (!LittleFS.begin(false)) {
+        Serial.println("LittleFS mount failed; web server not started");
+        return;
+    }
     loadWebPassword();
     g_server.serveStatic("/", LittleFS, "/")
         .setDefaultFile("index.html")
@@ -74,6 +77,27 @@ void begin() {
         if (!requireAuthentication(req)) return;
         JsonDocument doc;
         Telemetry::buildSettingsJson(doc);
+        String out;
+        serializeJson(doc, out);
+        req->send(200, "application/json", out);
+    });
+
+    // --- Аналитика / журнал запусков (run_log.h) ---
+    g_server.on("/api/history/summary", HTTP_GET, [](AsyncWebServerRequest* req) {
+        if (!requireAuthentication(req)) return;
+        JsonDocument doc;
+        Telemetry::buildHistorySummaryJson(doc);
+        String out;
+        serializeJson(doc, out);
+        req->send(200, "application/json", out);
+    });
+
+    g_server.on("/api/history", HTTP_GET, [](AsyncWebServerRequest* req) {
+        if (!requireAuthentication(req)) return;
+        size_t limit = req->hasParam("limit") ? req->getParam("limit")->value().toInt() : 50;
+        size_t offset = req->hasParam("offset") ? req->getParam("offset")->value().toInt() : 0;
+        JsonDocument doc;
+        Telemetry::buildHistoryJson(doc, limit, offset);
         String out;
         serializeJson(doc, out);
         req->send(200, "application/json", out);

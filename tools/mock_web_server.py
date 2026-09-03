@@ -3,9 +3,11 @@
 Локальный мок-сервер для веб-интерфейса Humidino.
 
 Отдаёт data/index.html и имитирует REST API прошивки (/api/state,
-/api/settings, /api/presets) со случайными, но правдоподобными
-данными — позволяет открыть и потестировать веб-интерфейс в браузере без
-реального ESP32: анимацию вентилятора, переключение режимов, пресеты.
+/api/settings, /api/presets, /api/history, /api/history/summary) со
+случайными, но правдоподобными данными — позволяет открыть и потестировать
+веб-интерфейс в браузере без реального ESP32: анимацию вентилятора,
+переключение режимов, пресеты, раздел аналитики (график и таблицу
+последних запусков).
 
 Использование:
     python tools/mock_web_server.py [порт]
@@ -25,6 +27,7 @@ from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 START_TIME = time.time()
+LOCAL_TZ_OFFSET_SEC = 3 * 3600
 
 # Строковые идентификаторы совпадают с ShaState::toString(RelayControlState)
 # в shared_state.cpp. Цикл нужен только для демонстрации — на реальном
@@ -50,6 +53,44 @@ presets = [
     {"name": "Зима", "rh_target": 75.0, "hysteresis_pct": 5.0, "freeze_c": 3.0,
      "min_runtime_ms": 15 * 60 * 1000, "min_pause_ms": 20 * 60 * 1000},
 ]
+
+# --- Аналитика / журнал запусков (см. src/run_log.h) ---
+# Правдоподобная, но не настоящая история циклов реле за последние ~10 дней —
+# только чтобы потестировать вёрстку графика и таблицы /api/history без
+# реального устройства (см. README §5.1).
+STOP_REASONS = ["hysteresis_reached"] * 6 + ["locked_freeze", "locked_condensation", "manual_off"]
+
+
+def build_fake_history():
+    records = []
+    t = time.time() - random.uniform(0, 3 * 3600)  # старт самого свежего цикла — недавно
+    for _ in range(120):
+        duration_s = random.randint(8, 40) * 60
+        start_epoch = int(t)
+        end_epoch = start_epoch + duration_s
+        crawl_rh_start = random.uniform(72, 78)
+        crawl_rh_end = crawl_rh_start - random.uniform(3, 8)
+        crawl_t = random.uniform(16, 20)
+        outside_rh_start = random.uniform(45, 65)
+        outside_rh_end = outside_rh_start + random.uniform(-3, 3)
+        outside_t = random.uniform(-5, 15)
+        records.append({
+            "start_epoch": start_epoch,
+            "end_epoch": end_epoch,
+            "duration_s": duration_s,
+            "stop_reason": random.choice(STOP_REASONS),
+            "in_progress": False,
+            "start": {"crawl_rh": round(crawl_rh_start, 1), "crawl_temp_c": round(crawl_t, 1),
+                       "outside_rh": round(outside_rh_start, 1), "outside_temp_c": round(outside_t, 1)},
+            "end": {"crawl_rh": round(crawl_rh_end, 1), "crawl_temp_c": round(crawl_t - 0.1, 1),
+                     "outside_rh": round(outside_rh_end, 1), "outside_temp_c": round(outside_t, 1)},
+        })
+        # пауза до предыдущего (по времени) цикла — идём назад по истории
+        t -= duration_s + random.randint(15, 90) * 60
+    return records  # от самого свежего к самому старому — как отдаёт настоящий /api/history
+
+
+FAKE_HISTORY = build_fake_history()
 
 def fake_zone(base_temp, base_rh, with_dew, error=False):
     t = base_temp + random.uniform(-0.3, 0.3)
@@ -111,6 +152,32 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._send_json(settings)
         elif self.path == "/api/presets":
             self._send_json(presets)
+        elif self.path.startswith("/api/history/summary"):
+            now = int(time.time())
+            local_now = now + LOCAL_TZ_OFFSET_SEC
+            today_start = local_now - local_now % 86400 - LOCAL_TZ_OFFSET_SEC
+            today_end = today_start + 86400
+            runs_today = sum(1 for r in FAKE_HISTORY if today_start <= r["start_epoch"] < today_end)
+            runtime_today = sum(
+                max(0, min(now if r["in_progress"] else r["end_epoch"], today_end)
+                    - max(r["start_epoch"], today_start))
+                for r in FAKE_HISTORY
+            )
+            self._send_json({
+                "time_synced": True,
+                "local_tz_offset_sec": LOCAL_TZ_OFFSET_SEC,
+                "runs_today": runs_today,
+                "runtime_today_s": runtime_today,
+                "runs_total": len(FAKE_HISTORY) + 340,  # имитация: счётчик за всё время шире, чем хранящийся журнал
+                "log_count": len(FAKE_HISTORY),
+                "log_capacity": 2000,
+            })
+        elif self.path.startswith("/api/history"):
+            from urllib.parse import urlparse, parse_qs
+            qs = parse_qs(urlparse(self.path).query)
+            limit = int(qs.get("limit", [50])[0])
+            offset = int(qs.get("offset", [0])[0])
+            self._send_json(FAKE_HISTORY[offset:offset + limit])
         else:
             super().do_GET()
 

@@ -7,10 +7,11 @@
 #include "ui_keyboard.h"
 #include "ui_presets_screen.h"
 #include "ui_settings_screen.h"
+#include "ui_stats_screen.h"
 
 namespace {
 
-enum TabIndex { kTabMain = 0, kTabSettings, kTabPresets, kTabCount };
+enum TabIndex { kTabMain = 0, kTabSettings, kTabPresets, kTabStats, kTabCount };
 
 lv_obj_t* g_tabs[kTabCount];
 lv_obj_t* g_navButtons[kTabCount];
@@ -41,6 +42,9 @@ void showTab(int idx) {
             break;
         case kTabPresets:
             UiPresetsScreen::refresh();
+            break;
+        case kTabStats:
+            UiStatsScreen::refresh();
             break;
         default:
             break;
@@ -81,8 +85,8 @@ void build() {
     lv_obj_set_style_pad_all(scr, 0, 0);
     lv_obj_set_style_pad_row(scr, 0, 0);
 
-    // Контейнер контента — все 3 экрана лежат в нём рядом, виден только
-    // тот, что выбран сейчас (см. showTab()).
+    // Контейнер контента — все kTabCount экранов лежат в нём рядом, виден
+    // только тот, что выбран сейчас (см. showTab()).
     lv_obj_t* content = lv_obj_create(scr);
     lv_obj_set_width(content, LV_PCT(100));
     lv_obj_set_flex_grow(content, 1);
@@ -99,6 +103,7 @@ void build() {
     UiDashboard::build(g_tabs[kTabMain]);
     UiSettingsScreen::build(g_tabs[kTabSettings]);
     UiPresetsScreen::build(g_tabs[kTabPresets]);
+    UiStatsScreen::build(g_tabs[kTabStats]);
 
     // Нижняя панель навигации.
     lv_obj_t* navBar = lv_obj_create(scr);
@@ -112,6 +117,7 @@ void build() {
     g_navButtons[kTabMain] = buildNavButton(navBar, "Main", kTabMain);
     g_navButtons[kTabSettings] = buildNavButton(navBar, "Settings", kTabSettings);
     g_navButtons[kTabPresets] = buildNavButton(navBar, "Presets", kTabPresets);
+    g_navButtons[kTabStats] = buildNavButton(navBar, "Stats", kTabStats);
 
     // Клавиатура — оверлей поверх всего экрана (создана на самом scr, а не
     // внутри конкретной вкладки), чтобы всплывать над полями ввода на

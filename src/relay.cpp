@@ -6,6 +6,7 @@
 
 #include "backlight.h"
 #include "config.h"
+#include "run_log.h"
 #include "settings_store.h"
 #include "watchdog.h"
 
@@ -14,6 +15,24 @@ namespace {
 void setRelayPin(bool on) {
     bool level = RELAY_ACTIVE_HIGH ? on : !on;
     digitalWrite(PIN_RELAY_SSR, level ? HIGH : LOW);
+}
+
+// Причина остановки для журнала (run_log.h) — определяется состоянием, в
+// которое реле переходит, а для обычного (не аварийного) конца цикла ещё и
+// режимом: Idle/MinPauseHold после ручного выключения — это ManualOff, после
+// авто-цикла по гистерезису — HysteresisReached.
+RunLog::StopReason stopReasonFor(RelayControlState next, OperatingMode mode) {
+    switch (next) {
+        case RelayControlState::LockedOutFreeze:
+            return RunLog::StopReason::LockedFreeze;
+        case RelayControlState::LockedOutCondensation:
+            return RunLog::StopReason::LockedCondensation;
+        case RelayControlState::LockedOutSensorFault:
+            return RunLog::StopReason::SensorFault;
+        default:
+            return (mode == OperatingMode::ManualOff) ? RunLog::StopReason::ManualOff
+                                                       : RunLog::StopReason::HysteresisReached;
+    }
 }
 
 class RelayController {
@@ -94,7 +113,7 @@ public:
         }
 
         if (next != status_.state) {
-            transitionTo(next, nowMs);
+            transitionTo(next, nowMs, readings, cfg.mode);
         }
     }
 
@@ -103,7 +122,8 @@ public:
 private:
     RelayStatus status_;
 
-    void transitionTo(RelayControlState next, uint32_t nowMs) {
+    void transitionTo(RelayControlState next, uint32_t nowMs,
+                       const SensorReading readings[static_cast<size_t>(SensorId::Count)], OperatingMode mode) {
         bool wasRunning = status_.relayOn;
         status_.state = next;
         status_.stateEnteredMs = nowMs;
@@ -117,8 +137,10 @@ private:
                 status_.lastOnMs = nowMs;
                 status_.cycleCount++;
                 Settings::saveCycleCount(status_.cycleCount);
+                RunLog::recordStart(readings);
             } else {
                 status_.lastOffMs = nowMs;
+                RunLog::recordStop(readings, stopReasonFor(next, mode), nowMs - status_.lastOnMs);
             }
         }
     }
@@ -147,7 +169,12 @@ void controlTask(void*) {
 namespace Relay {
 
 void begin() {
-    xTaskCreatePinnedToCore(controlTask, "controlTask", 3072, nullptr, 4, nullptr, 0);
+    // Стек увеличен с 3072 до 5120 байт: с добавлением журнала запусков
+    // (run_log.h) controlTask теперь на каждом включении/выключении реле
+    // делает файловый ввод-вывод на LittleFS (открытие/запись/закрытие через
+    // VFS) — это заметно тяжелее по стеку, чем прежние только NVS-записи
+    // (Settings::saveCycleCount()), и не проверялось на реальном железе.
+    xTaskCreatePinnedToCore(controlTask, "controlTask", 5120, nullptr, 4, nullptr, 0);
 }
 
 const char* modeBadgeText(OperatingMode mode) {

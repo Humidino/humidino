@@ -1,7 +1,10 @@
 #include "telemetry.h"
 
 #include <Arduino.h>
+#include <vector>
 
+#include "config.h"
+#include "run_log.h"
 #include "shared_state.h"
 
 namespace Telemetry {
@@ -43,6 +46,54 @@ void buildSettingsJson(JsonDocument& doc) {
     doc["min_runtime_ms"] = settings.minRuntimeMs;
     doc["min_pause_ms"] = settings.minPauseMs;
     doc["mode"] = toString(settings.mode);
+}
+
+void buildHistorySummaryJson(JsonDocument& doc) {
+    RunLog::Summary s = RunLog::getSummary();
+    doc["time_synced"] = s.timeSynced;
+    doc["local_tz_offset_sec"] = LOCAL_TZ_OFFSET_SEC;
+    doc["runs_today"] = s.runsToday;
+    doc["runtime_today_s"] = s.runtimeTodayMs / 1000;
+    doc["runs_total"] = s.runsTotal;
+    doc["log_count"] = RunLog::count();
+    doc["log_capacity"] = RunLog::capacity();
+}
+
+void buildHistoryJson(JsonDocument& doc, size_t limit, size_t offset) {
+    constexpr size_t kMaxLimit = 200;  // потолок для одного запроса — не даём клиенту раздуть память запросом ?limit=100000
+    if (limit == 0) limit = 50;
+    if (limit > kMaxLimit) limit = kMaxLimit;
+
+    std::vector<RunLog::RunRecord> records(limit);
+    size_t n = RunLog::getRecent(records.data(), limit, offset);
+
+    JsonArray arr = doc.to<JsonArray>();
+    for (size_t i = 0; i < n; i++) {
+        const RunLog::RunRecord& r = records[i];
+        JsonObject o = arr.add<JsonObject>();
+        o["start_epoch"] = r.startEpoch;
+        o["end_epoch"] = r.endEpoch;
+        o["duration_s"] = r.durationMs / 1000;
+        o["stop_reason"] = RunLog::toString(r.stopReason);
+        // "unknown" — только у ещё не закрытой (текущей) записи, см.
+        // комментарий у RunLog::StopReason::Unknown.
+        o["in_progress"] = (r.stopReason == RunLog::StopReason::Unknown);
+
+        JsonObject start = o["start"].to<JsonObject>();
+        auto setOrNull = [](JsonObject obj, const char* key, float v) {
+            if (isnan(v)) obj[key] = nullptr; else obj[key] = v;
+        };
+        setOrNull(start, "crawl_rh", r.startCrawlRh);
+        setOrNull(start, "crawl_temp_c", r.startCrawlTempC);
+        setOrNull(start, "outside_rh", r.startOutsideRh);
+        setOrNull(start, "outside_temp_c", r.startOutsideTempC);
+
+        JsonObject end = o["end"].to<JsonObject>();
+        setOrNull(end, "crawl_rh", r.endCrawlRh);
+        setOrNull(end, "crawl_temp_c", r.endCrawlTempC);
+        setOrNull(end, "outside_rh", r.endOutsideRh);
+        setOrNull(end, "outside_temp_c", r.endOutsideTempC);
+    }
 }
 
 }  // namespace Telemetry
