@@ -23,14 +23,17 @@ void buildStateJson(JsonDocument& doc) {
     relay["state_str"] = toString(s.relay.state);           // машиночитаемый id, напр. "locked_freeze"
     relay["cycle_count"] = s.relay.cycleCount;               // сколько раз включалось за всё время (переживает перезагрузки)
 
-    static const char* kKeys[] = {"crawl_intake", "outside"};
+    static const char* kKeys[] = {"crawl_intake", "crawl_mid", "crawl_far", "outside"};
     JsonObject zones = doc["zones"].to<JsonObject>();
     for (size_t i = 0; i < static_cast<size_t>(SensorId::Count); i++) {
         const SensorReading& r = s.readings[i];
         JsonObject z = zones[kKeys[i]].to<JsonObject>();
         z["temp_c"] = r.temperatureC;
         z["rh_pct"] = r.humidityPct;
-        if (i == static_cast<size_t>(SensorId::CrawlspaceIntake)) {  // точка росы имеет смысл только для подпола
+        // Точка росы/абс. влажность имеют смысл только для зон подпола, не
+        // для улицы (см. алгоритм осушения в relay.cpp — condensationSafe
+        // сравнивает абс. влажность улицы с подполом, а не наоборот).
+        if (static_cast<SensorId>(i) != SensorId::Outside) {
             z["dew_c"] = r.dewPointC;
             z["abs_h_gm3"] = r.absHumidityGm3;
         }

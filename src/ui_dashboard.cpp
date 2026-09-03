@@ -58,7 +58,9 @@ lv_obj_t* buildModeButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb) 
 }
 
 const char* kZoneTitles[] = {
-    "Подпол",
+    "Приточка",
+    "Середина",
+    "Дальний угол",
     "Улица",
 };
 
