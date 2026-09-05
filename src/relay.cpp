@@ -35,6 +35,42 @@ RunLog::StopReason stopReasonFor(RelayControlState next, OperatingMode mode) {
     }
 }
 
+// Сводка по всем живым (valid && !error) датчикам подпола. Порог включения/
+// выключения по влажности берёт MAX по зонам — иначе одна сухая зона может
+// маскировать сырую, а именно сырые места и важно сушить. Порог защиты от
+// конденсата берёт MIN абсолютной влажности — самую сухую зону подпола:
+// нельзя пускать уличный воздух, если он более влажный (абсолютно), чем
+// воздух в самой сухой части подпола, иначе именно там станет хуже, даже
+// если в среднем по подполу воздух остаётся суше уличного. avgTempC — только
+// для журнала (не участвует в пороговых решениях), поэтому усреднение здесь
+// уместно в отличие от RH/abs-humidity.
+struct CrawlspaceSummary {
+    bool anyLive = false;
+    uint8_t liveCount = 0;
+    float maxRhPercent = NAN;
+    float minAbsHumidityGm3 = NAN;
+    float avgTempC = NAN;
+};
+
+CrawlspaceSummary summarizeCrawlspace(const SensorReading readings[static_cast<size_t>(SensorId::Count)]) {
+    CrawlspaceSummary s;
+    float tempSum = 0.0f;
+    for (size_t i = 0; i < static_cast<size_t>(SensorId::Count); i++) {
+        SensorId id = static_cast<SensorId>(i);
+        if (!isCrawlspaceSensor(id)) continue;
+        const SensorReading& r = readings[i];
+        if (!r.valid || r.error) continue;
+
+        if (!s.anyLive || r.humidityPct > s.maxRhPercent) s.maxRhPercent = r.humidityPct;
+        if (!s.anyLive || r.absHumidityGm3 < s.minAbsHumidityGm3) s.minAbsHumidityGm3 = r.absHumidityGm3;
+        tempSum += r.temperatureC;
+        s.anyLive = true;
+        s.liveCount++;
+    }
+    if (s.anyLive) s.avgTempC = tempSum / s.liveCount;
+    return s;
+}
+
 class RelayController {
 public:
     void begin(uint32_t initialMinPauseMs) {
@@ -47,10 +83,17 @@ public:
     }
 
     void update(const SensorReading readings[static_cast<size_t>(SensorId::Count)], const RuntimeSettings& cfg, uint32_t nowMs) {
-        const SensorReading& intake = readings[static_cast<size_t>(SensorId::CrawlspaceIntake)];
         const SensorReading& outside = readings[static_cast<size_t>(SensorId::Outside)];
+        CrawlspaceSummary crawl = summarizeCrawlspace(readings);
+        status_.crawlspaceLiveSensors = crawl.liveCount;
 
-        bool sensorsHealthy = intake.valid && outside.valid && !intake.error && !outside.error;
+        // Уличный датчик не резервирован (в отличие от подпола) — его отказ
+        // всегда блокирует реле целиком: без него нельзя проверить ни мороз,
+        // ни конденсат. Подпол блокирует реле, только если живых датчиков не
+        // осталось вообще (crawl.anyLive=false); пока жив хотя бы один —
+        // работаем по summarizeCrawlspace() дальше (деградированный режим,
+        // а не блокировка).
+        bool sensorsHealthy = outside.valid && !outside.error && crawl.anyLive;
 
         // Заморозка — единственная защита, которая действует безусловно даже
         // в ручных режимах (физическая безопасность конструкции важнее любой
@@ -78,9 +121,8 @@ public:
         } else if (!sensorsHealthy) {
             next = RelayControlState::LockedOutSensorFault;
         } else {
-            float crawlRh = intake.humidityPct;
-            float crawlAbsMin = intake.absHumidityGm3;
-            bool condensationSafe = outside.absHumidityGm3 < crawlAbsMin;
+            float crawlRh = crawl.maxRhPercent;
+            bool condensationSafe = outside.absHumidityGm3 < crawl.minAbsHumidityGm3;
 
             if (status_.state == RelayControlState::Running) {
                 // Отключения по физической защите немедленно перекрывают
@@ -113,7 +155,7 @@ public:
         }
 
         if (next != status_.state) {
-            transitionTo(next, nowMs, readings, cfg.mode);
+            transitionTo(next, nowMs, outside, crawl, cfg.mode);
         }
     }
 
@@ -122,8 +164,8 @@ public:
 private:
     RelayStatus status_;
 
-    void transitionTo(RelayControlState next, uint32_t nowMs,
-                       const SensorReading readings[static_cast<size_t>(SensorId::Count)], OperatingMode mode) {
+    void transitionTo(RelayControlState next, uint32_t nowMs, const SensorReading& outside,
+                       const CrawlspaceSummary& crawl, OperatingMode mode) {
         bool wasRunning = status_.relayOn;
         status_.state = next;
         status_.stateEnteredMs = nowMs;
@@ -137,10 +179,11 @@ private:
                 status_.lastOnMs = nowMs;
                 status_.cycleCount++;
                 Settings::saveCycleCount(status_.cycleCount);
-                RunLog::recordStart(readings);
+                RunLog::recordStart(crawl.maxRhPercent, crawl.avgTempC, outside.humidityPct, outside.temperatureC);
             } else {
                 status_.lastOffMs = nowMs;
-                RunLog::recordStop(readings, stopReasonFor(next, mode), nowMs - status_.lastOnMs);
+                RunLog::recordStop(crawl.maxRhPercent, crawl.avgTempC, outside.humidityPct, outside.temperatureC,
+                                    stopReasonFor(next, mode), nowMs - status_.lastOnMs);
             }
         }
     }

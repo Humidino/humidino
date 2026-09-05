@@ -23,14 +23,24 @@ void buildStateJson(JsonDocument& doc) {
     relay["state_str"] = toString(s.relay.state);           // машиночитаемый id, напр. "locked_freeze"
     relay["cycle_count"] = s.relay.cycleCount;               // сколько раз включалось за всё время (переживает перезагрузки)
 
-    static const char* kKeys[] = {"crawl_intake", "outside"};
+    // Сколько из CRAWLSPACE_SENSOR_COUNT датчиков подпола сейчас живы и
+    // участвуют в агрегации (relay.cpp::summarizeCrawlspace) — веб-интерфейс
+    // может показать "работаем в деградированном режиме, 2/3", не дожидаясь
+    // полной блокировки locked_sensor_fault.
+    JsonObject crawlspace = doc["crawlspace"].to<JsonObject>();
+    crawlspace["live_sensors"] = s.relay.crawlspaceLiveSensors;
+    crawlspace["total_sensors"] = CRAWLSPACE_SENSOR_COUNT;
+    crawlspace["degraded"] = s.relay.crawlspaceLiveSensors > 0 && s.relay.crawlspaceLiveSensors < CRAWLSPACE_SENSOR_COUNT;
+
+    static const char* kKeys[] = {"crawl_zone1", "crawl_zone2", "crawl_zone3", "outside"};
     JsonObject zones = doc["zones"].to<JsonObject>();
     for (size_t i = 0; i < static_cast<size_t>(SensorId::Count); i++) {
+        SensorId id = static_cast<SensorId>(i);
         const SensorReading& r = s.readings[i];
         JsonObject z = zones[kKeys[i]].to<JsonObject>();
         z["temp_c"] = r.temperatureC;
         z["rh_pct"] = r.humidityPct;
-        if (i == static_cast<size_t>(SensorId::CrawlspaceIntake)) {  // точка росы имеет смысл только для подпола
+        if (isCrawlspaceSensor(id)) {  // точка росы имеет смысл только для подпола
             z["dew_c"] = r.dewPointC;
             z["abs_h_gm3"] = r.absHumidityGm3;
         }

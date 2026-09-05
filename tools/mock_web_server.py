@@ -113,13 +113,26 @@ def build_state():
         state_str = "running"
     wobble = math.sin(elapsed / 5.0) * 3
 
+    # Зона 1 периодически "отваливается" (как раньше) — демонстрирует
+    # деградированный режим (2 из 3 живых), а не полную блокировку, раз
+    # остальные две зоны подпола остаются исправны.
+    zone1_error = int(elapsed) % 30 < 3
+    crawl_live = 3 - (1 if zone1_error else 0)
+
     return {
         "uptime_s": int(elapsed),
         "wifi_rssi": -55 + int(wobble),
         "free_heap": 210000 + random.randint(-5000, 5000),
         "relay": {"on": state_str == "running", "state_str": state_str},
+        "crawlspace": {
+            "live_sensors": crawl_live,
+            "total_sensors": 3,
+            "degraded": crawl_live < 3,
+        },
         "zones": {
-            "crawl_intake": fake_zone(18 + wobble * 0.2, 74, True, error=(int(elapsed) % 30 < 3)),
+            "crawl_zone1": fake_zone(18 + wobble * 0.2, 74, True, error=zone1_error),
+            "crawl_zone2": fake_zone(17 + wobble * 0.2, 71, True),
+            "crawl_zone3": fake_zone(19 + wobble * 0.2, 76, True),
             "outside": fake_zone(9 + wobble, 55, False),
         },
     }

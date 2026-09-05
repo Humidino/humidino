@@ -3,8 +3,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "shared_state.h"
-
 // Журнал запусков реле — кольцевой буфер фиксированного размера на LittleFS
 // (переживает перезагрузки), в который RelayController (relay.cpp) пишет
 // одну запись на каждый цикл включения/выключения: когда реле включилось и
@@ -53,14 +51,17 @@ struct RunRecord {
 // журнала. Вызывать один раз при старте, до Relay::begin().
 void begin();
 
-// Открывает новую запись (реле только что включилось) — снимок показаний
-// датчиков на этот момент.
-void recordStart(const SensorReading readings[static_cast<size_t>(SensorId::Count)]);
+// Открывает новую запись (реле только что включилось) — снимок показаний на
+// этот момент. crawlRh/crawlTempC — уже агрегированное по всем живым
+// датчикам подпола значение (relay.cpp::summarizeCrawlspace), а не показания
+// одного конкретного датчика; NAN, если на момент вызова не было ни одного
+// живого датчика соответствующей роли (см. NAN-конвенцию в RunRecord ниже).
+void recordStart(float crawlRh, float crawlTempC, float outsideRh, float outsideTempC);
 
 // Закрывает текущую открытую запись (реле только что выключилось).
 // durationMs — сколько реле реально проработало в этом цикле (в relay.cpp
 // уже есть точный millis()-таймер начала, пересчитывать его здесь не нужно).
-void recordStop(const SensorReading readings[static_cast<size_t>(SensorId::Count)], StopReason reason,
+void recordStop(float crawlRh, float crawlTempC, float outsideRh, float outsideTempC, StopReason reason,
                  uint32_t durationMs);
 
 struct Summary {

@@ -8,12 +8,16 @@
 ## Общая идея
 
 Раз в секунду (`CONTROL_EVAL_INTERVAL_MS = 1000` мс,
-[config.h:56](../include/config.h)) задача `controlTask`
-([relay.cpp:129](../src/relay.cpp)) читает показания двух датчиков и решает,
-включать ли SSR-реле вентилятора (`PIN_RELAY_SSR`, [config.h:33](../include/config.h)):
+[config.h:74](../include/config.h)) задача `controlTask`
+([relay.cpp:194](../src/relay.cpp)) читает показания четырёх датчиков и решает,
+включать ли SSR-реле вентилятора (`PIN_RELAY_SSR`, [config.h:34](../include/config.h)):
 
-- **CrawlspaceIntake** — датчик в подполье (влажность, которую регулируем);
-- **Outside** — датчик снаружи (температура и абсолютная влажность).
+- **CrawlspaceZone1/2/3** — три датчика в подполье, разнесённые по разным
+  зонам (влажность, которую регулируем). Резервированы друг относительно
+  друга: пока жив хотя бы один, реле продолжает работать по оставшимся —
+  см. «Устойчивость к отказу датчиков подполья» ниже;
+- **Outside** — датчик снаружи (температура и абсолютная влажность). Не
+  резервирован — его отказ всегда блокирует реле целиком.
 
 Решение — это конечный автомат (`RelayControlState`,
 [shared_state.h:23](../src/shared_state.h)) с шестью состояниями:
@@ -54,16 +58,37 @@
 ## Порядок проверок в АВТО (по приоритету)
 
 Каждую секунду, сверху вниз — первая сработавшая проверка определяет
-следующее состояние ([relay.cpp:59-93](../src/relay.cpp)):
+следующее состояние ([relay.cpp:85-154](../src/relay.cpp)):
 
 ### 1. Исправность датчиков
 
 ```cpp
-sensorsHealthy = intake.valid && outside.valid && !intake.error && !outside.error
+crawl = summarizeCrawlspace(readings)  // сводка по живым (valid && !error) зонам подпола
+sensorsHealthy = outside.valid && !outside.error && crawl.anyLive
 ```
 
-Если нет — сразу `LockedOutSensorFault`, реле выключено. Без исправных
-датчиков ни одну из следующих проверок безопасно оценить нельзя.
+Если нет — сразу `LockedOutSensorFault`, реле выключено. Без исправного
+уличного датчика ни одну из следующих проверок безопасно оценить нельзя.
+Уличный датчик не резервирован — его отказ блокирует всё безусловно.
+
+Подпол резервирован тремя датчиками (`CrawlspaceZone1/2/3`) — блокировка
+наступает, только если отказали **все три** (`crawl.anyLive == false`). Пока
+жив хотя бы один, `sensorsHealthy` остаётся `true`, а решения ниже
+принимаются по агрегату живых зон (`summarizeCrawlspace()`,
+[relay.cpp:38-72](../src/relay.cpp)) — не полная блокировка, а деградированный
+режим:
+
+- порог включения/выключения по влажности берёт **MAX** влажности среди
+  живых зон — иначе одна сухая зона маскирует сырую, а сырые места и важно
+  сушить;
+- порог защиты от конденсата (см. ниже) берёт **MIN** абсолютной влажности
+  среди живых зон — самую сухую зону подпола, чтобы не сделать хуже именно
+  там, где суше всего.
+
+Число живых датчиков подпола видно в `RelayStatus::crawlspaceLiveSensors`
+([shared_state.h](../src/shared_state.h)) и в JSON-API (`crawlspace.live_sensors`/
+`crawlspace.degraded`, [telemetry.cpp](../src/telemetry.cpp)) — веб-интерфейс
+может показать деградацию, не дожидаясь `locked_sensor_fault`.
 
 ### 2. Защита от замерзания
 
@@ -79,13 +104,13 @@ freezeSafe = outside.temperatureC > freezeProtectC
 ### 3. Защита от конденсата
 
 ```cpp
-condensationSafe = outside.absHumidityGm3 < crawlspaceAbsHumidityGm3
+condensationSafe = outside.absHumidityGm3 < crawl.minAbsHumidityGm3
 ```
 
 Втягивать воздух снаружи имеет смысл только если в нём **меньше** влаги (по
-абсолютной влажности), чем уже в подполье — иначе вентиляция будет приносить
-дополнительную влагу и вызывать конденсат. Если небезопасно —
-`LockedOutCondensation`.
+абсолютной влажности), чем в самой сухой из живых зон подполья — иначе
+вентиляция будет приносить дополнительную влагу именно туда, где суше всего,
+и вызывать там конденсат. Если небезопасно — `LockedOutCondensation`.
 
 ### 4. Гистерезис по целевой влажности
 
@@ -97,13 +122,16 @@ condensationSafe = outside.absHumidityGm3 < crawlspaceAbsHumidityGm3
   износа);
 - иначе выключается (`Idle`), только когда одновременно:
   - прошло `minRuntimeMs` с момента включения, **и**
-  - влажность подполья опустилась ниже `rhTargetPercent - hysteresisPercent`.
+  - максимальная влажность среди живых зон подполья (`crawl.maxRhPercent`)
+    опустилась ниже `rhTargetPercent - hysteresisPercent` — т.е. просохла даже
+    самая сырая живая зона.
 
 **Если не `Running`:**
 - одна и та же логика применяется к `Idle`, `MinPauseHold` и после снятия любой
   блокировки `LockedOut*`;
-- включается (`Running`), если влажность подполья выше `rhTargetPercent`
-  **и** с последнего выключения прошло строго больше `minPauseMs`;
+- включается (`Running`), если максимальная влажность среди живых зон
+  подполья выше `rhTargetPercent` **и** с последнего выключения прошло строго
+  больше `minPauseMs`;
 - если порог влажности превышен, но прошло не больше `minPauseMs`
   (в том числе ровно `minPauseMs`) — `MinPauseHold` (реле "хочет"
   включиться, но ждёт);
@@ -124,10 +152,14 @@ condensationSafe = outside.absHumidityGm3 < crawlspaceAbsHumidityGm3
 ## Куда смотреть в коде
 
 - Сама state machine: `RelayController::update()`,
-  [relay.cpp:30](../src/relay.cpp)
+  [relay.cpp:85](../src/relay.cpp)
+- Сводка по датчикам подполья (MAX влажности / MIN абс. влажности среди
+  живых зон): `summarizeCrawlspace()`, [relay.cpp:55](../src/relay.cpp)
 - Переходы состояний и запись счётчика циклов: `transitionTo()`,
-  [relay.cpp:106](../src/relay.cpp)
-- Определения состояний/режимов: [shared_state.h](../src/shared_state.h)
+  [relay.cpp:167](../src/relay.cpp)
+- Определения состояний/режимов и датчиков: [shared_state.h](../src/shared_state.h),
+  [config.h](../include/config.h) (`SensorId`, `isCrawlspaceSensor`,
+  `CRAWLSPACE_SENSOR_COUNT`)
 - Хранение и дефолты настроек: [settings_store.cpp](../src/settings_store.cpp),
   [settings_store.h](../src/settings_store.h)
-- Константы по умолчанию: [config.h:56-62](../include/config.h)
+- Константы по умолчанию: [config.h:74-80](../include/config.h)

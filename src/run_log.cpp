@@ -173,18 +173,15 @@ void begin() {
     xSemaphoreGive(g_mutex);
 }
 
-void recordStart(const SensorReading readings[static_cast<size_t>(SensorId::Count)]) {
+void recordStart(float crawlRh, float crawlTempC, float outsideRh, float outsideTempC) {
     if (!g_ready || !lock()) return;
-
-    const SensorReading& crawl = readings[static_cast<size_t>(SensorId::CrawlspaceIntake)];
-    const SensorReading& outside = readings[static_cast<size_t>(SensorId::Outside)];
 
     RunRecord rec{};
     rec.startEpoch = TimeSync::nowEpoch();
-    rec.startCrawlRh = crawl.humidityPct;
-    rec.startCrawlTempC = crawl.temperatureC;
-    rec.startOutsideRh = outside.humidityPct;
-    rec.startOutsideTempC = outside.temperatureC;
+    rec.startCrawlRh = crawlRh;
+    rec.startCrawlTempC = crawlTempC;
+    rec.startOutsideRh = outsideRh;
+    rec.startOutsideTempC = outsideTempC;
 
     uint32_t slot = g_header.writeIndex;
     if (writeRecordAt(slot, rec)) {
@@ -197,7 +194,7 @@ void recordStart(const SensorReading readings[static_cast<size_t>(SensorId::Coun
     xSemaphoreGive(g_mutex);
 }
 
-void recordStop(const SensorReading readings[static_cast<size_t>(SensorId::Count)], StopReason reason,
+void recordStop(float crawlRh, float crawlTempC, float outsideRh, float outsideTempC, StopReason reason,
                 uint32_t durationMs) {
     if (!g_ready || !lock()) return;
     if (g_header.openIndex == kNoOpenSlot) {
@@ -208,15 +205,12 @@ void recordStop(const SensorReading readings[static_cast<size_t>(SensorId::Count
     RunRecord rec;
     bool recordPersisted = false;
     if (readRecordAt(g_header.openIndex, rec)) {
-        const SensorReading& crawl = readings[static_cast<size_t>(SensorId::CrawlspaceIntake)];
-        const SensorReading& outside = readings[static_cast<size_t>(SensorId::Outside)];
-
         rec.endEpoch = TimeSync::nowEpoch();
         rec.durationMs = durationMs;
-        rec.endCrawlRh = crawl.humidityPct;
-        rec.endCrawlTempC = crawl.temperatureC;
-        rec.endOutsideRh = outside.humidityPct;
-        rec.endOutsideTempC = outside.temperatureC;
+        rec.endCrawlRh = crawlRh;
+        rec.endCrawlTempC = crawlTempC;
+        rec.endOutsideRh = outsideRh;
+        rec.endOutsideTempC = outsideTempC;
         rec.stopReason = reason;
         recordPersisted = writeRecordAt(g_header.openIndex, rec);
     }

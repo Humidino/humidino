@@ -65,10 +65,14 @@ struct SensorContext {
 
 // У Adafruit_SHT31::begin(addr) нет параметра TwoWire — указатель на шину
 // фиксируется при конструировании, поэтому аргумент конструктора у каждого
-// датчика должен совпадать с полем `bus` ниже.
+// датчика должен совпадать с полем `bus` ниже. Топология — см. комментарии у
+// PIN_I2C0_*/PIN_I2C1_* и SensorId в config.h: зоны 1 и 3 подпола делят шину0
+// (разные адреса SHT31), зона 2 подпола делит шину1 с уличным датчиком.
 SensorContext g_sensors[] = {
-    {SensorId::CrawlspaceIntake, Adafruit_SHT31(&Wire), &Wire, SHT31_ADDR_A, PIN_I2C0_SDA, PIN_I2C0_SCL},
-    {SensorId::Outside,          Adafruit_SHT31(&Wire1), &Wire1, SHT31_ADDR_A, PIN_I2C1_SDA, PIN_I2C1_SCL},
+    {SensorId::CrawlspaceZone1, Adafruit_SHT31(&Wire), &Wire, SHT31_ADDR_A, PIN_I2C0_SDA, PIN_I2C0_SCL},
+    {SensorId::CrawlspaceZone3, Adafruit_SHT31(&Wire), &Wire, SHT31_ADDR_B, PIN_I2C0_SDA, PIN_I2C0_SCL},
+    {SensorId::Outside,         Adafruit_SHT31(&Wire1), &Wire1, SHT31_ADDR_A, PIN_I2C1_SDA, PIN_I2C1_SCL},
+    {SensorId::CrawlspaceZone2, Adafruit_SHT31(&Wire1), &Wire1, SHT31_ADDR_B, PIN_I2C1_SDA, PIN_I2C1_SCL},
 };
 constexpr size_t kSensorCount = sizeof(g_sensors) / sizeof(g_sensors[0]);
 

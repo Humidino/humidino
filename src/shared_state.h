@@ -55,6 +55,12 @@ struct RelayStatus {
     // текущую сессию) — переживает перезагрузки, см. Settings::loadCycleCount()
     // в settings_store.h.
     uint32_t cycleCount = 0;
+    // Сколько из CRAWLSPACE_SENSOR_COUNT датчиков подпола сейчас дают
+    // валидные показания без ошибки (см. relay.cpp::summarizeCrawlspace).
+    // 0 => LockedOutSensorFault (нечем управлять); меньше CRAWLSPACE_SENSOR_COUNT,
+    // но больше 0 => реле продолжает работать по оставшимся живым датчикам
+    // (деградированный режим, не блокировка).
+    uint8_t crawlspaceLiveSensors = 0;
 };
 
 struct RuntimeSettings {

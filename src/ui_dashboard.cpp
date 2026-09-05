@@ -58,12 +58,14 @@ lv_obj_t* buildModeButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb) 
 }
 
 const char* kZoneTitles[] = {
-    "Подпол",
+    "Подпол 1",
+    "Подпол 2",
+    "Подпол 3",
     "Улица",
 };
 
 bool zoneHasDewPoint(SensorId id) {
-    return id != SensorId::Outside;
+    return isCrawlspaceSensor(id);
 }
 
 // Одна зона — одна горизонтальная строка на всю ширину экрана: title | value
