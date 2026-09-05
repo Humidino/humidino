@@ -16,6 +16,11 @@ namespace {
 // Смайлик-индикатор комфорта — нарисован примитивами LVGL (круг + глаза +
 // дуга-рот), а не символом Unicode: шрифты font_ru_* сгенерированы под узкий
 // диапазон глифов (см. fonts.h) и эмодзи не содержат.
+// 32, а не прежние 28 — вместе с укрупнёнными глазами (5px) и ртом (дуга
+// 20px/3px) даёт больше внутреннего пространства, иначе детали лица снова
+// упираются друг в друга на маленьком круге.
+constexpr int32_t kFaceSize = 32;
+
 struct FaceWidgets {
     lv_obj_t* face = nullptr;
     lv_obj_t* eyeL = nullptr;
@@ -115,26 +120,29 @@ FaceWidgets buildFace(lv_obj_t* slot) {
 
     f.face = lv_obj_create(slot);
     lv_obj_remove_style_all(f.face);
-    lv_obj_set_size(f.face, 28, 28);
+    lv_obj_set_size(f.face, kFaceSize, kFaceSize);
     lv_obj_set_style_radius(f.face, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(f.face, LV_OPA_COVER, 0);
     lv_obj_center(f.face);
 
+    // Глаза и рот — 5px и 3px дуга вместо прежних 3px/2px: на реальном
+    // экране (не в симуляторе) такие тонкие детали внутри 28px лица
+    // фактически сливались с фоном и были неразличимы вблизи.
     f.eyeL = lv_obj_create(f.face);
     lv_obj_remove_style_all(f.eyeL);
-    lv_obj_set_size(f.eyeL, 3, 3);
+    lv_obj_set_size(f.eyeL, 5, 5);
     lv_obj_set_style_radius(f.eyeL, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(f.eyeL, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(f.eyeL, lv_color_hex(0x2A2A2A), 0);
-    lv_obj_align(f.eyeL, LV_ALIGN_TOP_LEFT, 6, 8);
+    lv_obj_set_style_bg_color(f.eyeL, lv_color_hex(0x1A1A1A), 0);
+    lv_obj_align(f.eyeL, LV_ALIGN_TOP_LEFT, 6, 7);
 
     f.eyeR = lv_obj_create(f.face);
     lv_obj_remove_style_all(f.eyeR);
-    lv_obj_set_size(f.eyeR, 3, 3);
+    lv_obj_set_size(f.eyeR, 5, 5);
     lv_obj_set_style_radius(f.eyeR, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(f.eyeR, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(f.eyeR, lv_color_hex(0x2A2A2A), 0);
-    lv_obj_align(f.eyeR, LV_ALIGN_TOP_RIGHT, -6, 8);
+    lv_obj_set_style_bg_color(f.eyeR, lv_color_hex(0x1A1A1A), 0);
+    lv_obj_align(f.eyeR, LV_ALIGN_TOP_RIGHT, -6, 7);
 
     // Рот — индикаторная дуга lv_arc без фона и без "ручки": lv_arc_set_angles
     // напрямую задаёт углы индикатора (широкая нижняя дуга = улыбка, верхняя
@@ -142,13 +150,13 @@ FaceWidgets buildFace(lv_obj_t* slot) {
     // "значение", только форма.
     f.mouth = lv_arc_create(f.face);
     lv_obj_remove_style_all(f.mouth);
-    lv_obj_set_size(f.mouth, 16, 16);
+    lv_obj_set_size(f.mouth, 20, 20);
     lv_obj_set_style_arc_opa(f.mouth, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(f.mouth, 2, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_color(f.mouth, lv_color_hex(0x2A2A2A), LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(f.mouth, 3, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(f.mouth, lv_color_hex(0x1A1A1A), LV_PART_INDICATOR);
     lv_obj_set_style_arc_rounded(f.mouth, true, LV_PART_INDICATOR);
     lv_obj_clear_flag(f.mouth, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_align(f.mouth, LV_ALIGN_BOTTOM_MID, 0, -4);
+    lv_obj_align(f.mouth, LV_ALIGN_BOTTOM_MID, 0, -3);
 
     // Скрыто до первого update() с валидными данными — иначе один кадр
     // после старта виден недокрашенный кружок без настроения.
@@ -241,7 +249,7 @@ ZonePanelWidgets buildZoneRow(lv_obj_t* parent, const char* title, bool hasDew, 
     // выше (виджет есть всегда, содержимое — не всегда).
     w.faceSlot = lv_obj_create(row);
     lv_obj_remove_style_all(w.faceSlot);
-    lv_obj_set_size(w.faceSlot, 28, 28);
+    lv_obj_set_size(w.faceSlot, kFaceSize, kFaceSize);
     w.hasFace = hasFace;
     if (hasFace) {
         w.face = buildFace(w.faceSlot);
