@@ -5,6 +5,7 @@
 
 #include "config.h"
 #include "run_log.h"
+#include "season.h"
 #include "shared_state.h"
 
 namespace Telemetry {
@@ -16,6 +17,11 @@ void buildStateJson(JsonDocument& doc) {
     doc["uptime_s"] = millis() / 1000;
     doc["wifi_rssi"] = s.wifiRssi;
     doc["free_heap"] = ESP.getFreeHeap();
+    // Определённый по календарю сезон (см. season.h) — чисто информационно,
+    // для бейджа на дашборде/веб-странице. Сами пороги, применённые ли
+    // сейчас автосезонные значения — в rh_target/etc. и в season_auto из
+    // buildSettingsJson() ниже.
+    doc["season"] = Season::toString(Season::current());
 
     JsonObject relay = doc["relay"].to<JsonObject>();
     relay["on"] = s.relay.relayOn;
@@ -23,16 +29,7 @@ void buildStateJson(JsonDocument& doc) {
     relay["state_str"] = toString(s.relay.state);           // машиночитаемый id, напр. "locked_freeze"
     relay["cycle_count"] = s.relay.cycleCount;               // сколько раз включалось за всё время (переживает перезагрузки)
 
-    // Сколько из CRAWLSPACE_SENSOR_COUNT датчиков подпола сейчас живы и
-    // участвуют в агрегации (relay.cpp::summarizeCrawlspace) — веб-интерфейс
-    // может показать "работаем в деградированном режиме, 2/3", не дожидаясь
-    // полной блокировки locked_sensor_fault.
-    JsonObject crawlspace = doc["crawlspace"].to<JsonObject>();
-    crawlspace["live_sensors"] = s.relay.crawlspaceLiveSensors;
-    crawlspace["total_sensors"] = CRAWLSPACE_SENSOR_COUNT;
-    crawlspace["degraded"] = s.relay.crawlspaceLiveSensors > 0 && s.relay.crawlspaceLiveSensors < CRAWLSPACE_SENSOR_COUNT;
-
-    static const char* kKeys[] = {"crawl_zone1", "crawl_zone2", "crawl_zone3", "outside"};
+    static const char* kKeys[] = {"crawl_intake", "crawl_mid", "crawl_far", "outside"};
     JsonObject zones = doc["zones"].to<JsonObject>();
     for (size_t i = 0; i < static_cast<size_t>(SensorId::Count); i++) {
         SensorId id = static_cast<SensorId>(i);
@@ -40,7 +37,10 @@ void buildStateJson(JsonDocument& doc) {
         JsonObject z = zones[kKeys[i]].to<JsonObject>();
         z["temp_c"] = r.temperatureC;
         z["rh_pct"] = r.humidityPct;
-        if (isCrawlspaceSensor(id)) {  // точка росы имеет смысл только для подпола
+        // Точка росы/абс. влажность имеют смысл только для зон подпола, не
+        // для улицы (см. алгоритм осушения в relay.cpp — condensationSafe
+        // сравнивает абс. влажность улицы с подполом, а не наоборот).
+        if (static_cast<SensorId>(i) != SensorId::Outside) {
             z["dew_c"] = r.dewPointC;
             z["abs_h_gm3"] = r.absHumidityGm3;
         }
@@ -56,6 +56,7 @@ void buildSettingsJson(JsonDocument& doc) {
     doc["min_runtime_ms"] = settings.minRuntimeMs;
     doc["min_pause_ms"] = settings.minPauseMs;
     doc["mode"] = toString(settings.mode);
+    doc["season_auto"] = settings.seasonAutoEnabled;
 }
 
 void buildHistorySummaryJson(JsonDocument& doc) {

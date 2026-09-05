@@ -19,4 +19,13 @@ void applyRuntimeSettings(const RuntimeSettings& settings);
 // именем не найден.
 bool applyPresetByName(const char* name, RuntimeSettings& outApplied);
 
+// Если seasonAutoEnabled только что включили (был выключен в previous, стал
+// включён в next) — подставляет в next пороги/тайминги текущего сезона
+// (Season::profileFor(Season::current()), см. season.h) поверх того, что
+// прислал клиент, чтобы включение тумблера сработало сразу же, а не через
+// ожидание плановой проверки в фоновой задаче Season (до 10 минут). В любом
+// другом случае возвращает next без изменений. Не сохраняет и не публикует
+// ничего сама — результат нужно передать в applyRuntimeSettings().
+RuntimeSettings withSeasonSyncOnEnable(const RuntimeSettings& previous, RuntimeSettings next);
+
 }  // namespace SettingsActions

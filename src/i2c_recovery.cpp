@@ -4,9 +4,7 @@
 
 namespace I2CRecovery {
 
-bool recoverBus(TwoWire& bus, uint8_t sdaPin, uint8_t sclPin, uint32_t clockHz) {
-    bus.end();
-
+bool unstickPins(uint8_t sdaPin, uint8_t sclPin) {
     pinMode(sclPin, OUTPUT);
     pinMode(sdaPin, INPUT_PULLUP);
     digitalWrite(sclPin, HIGH);
@@ -33,8 +31,12 @@ bool recoverBus(TwoWire& bus, uint8_t sdaPin, uint8_t sclPin, uint32_t clockHz) 
     pinMode(sdaPin, INPUT_PULLUP);
     delayMicroseconds(5);
 
-    bool freed = (digitalRead(sdaPin) == HIGH);
+    return digitalRead(sdaPin) == HIGH;
+}
 
+bool recoverBus(TwoWire& bus, uint8_t sdaPin, uint8_t sclPin, uint32_t clockHz) {
+    bus.end();
+    bool freed = unstickPins(sdaPin, sclPin);
     bus.begin(sdaPin, sclPin, clockHz);
     return freed;
 }

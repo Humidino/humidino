@@ -27,6 +27,7 @@ RuntimeSettings loadUnlocked() {
     s.minPauseMs = g_prefs.getULong("min_pause_ms", MIN_PAUSE_MS);
     String modeStr = g_prefs.getString("mode", toString(OperatingMode::Auto));
     s.mode = operatingModeFromString(modeStr.c_str());
+    s.seasonAutoEnabled = g_prefs.getBool("season_auto", true);
     g_prefs.end();
     return s;
 }
@@ -62,6 +63,8 @@ void save(const RuntimeSettings& settings) {
         g_prefs.putULong("min_pause_ms", settings.minPauseMs);
     if (current.mode != settings.mode)
         g_prefs.putString("mode", toString(settings.mode));
+    if (current.seasonAutoEnabled != settings.seasonAutoEnabled)
+        g_prefs.putBool("season_auto", settings.seasonAutoEnabled);
     g_prefs.end();
     xSemaphoreGive(g_mutex);
 }

@@ -7,22 +7,37 @@
 #include "config.h"
 #include "fonts/fonts.h"
 #include "relay.h"
+#include "season.h"
 #include "settings_actions.h"
 #include "shared_state.h"
 
 namespace {
 
+// Смайлик-индикатор комфорта — нарисован примитивами LVGL (круг + глаза +
+// дуга-рот), а не символом Unicode: шрифты font_ru_* сгенерированы под узкий
+// диапазон глифов (см. fonts.h) и эмодзи не содержат.
+struct FaceWidgets {
+    lv_obj_t* face = nullptr;
+    lv_obj_t* eyeL = nullptr;
+    lv_obj_t* eyeR = nullptr;
+    lv_obj_t* mouth = nullptr;  // lv_arc, форма рта = диапазон bg-углов
+};
+
 struct ZonePanelWidgets {
     lv_obj_t* value;    // "23.4 °C   61.2 %" одной строкой
     lv_obj_t* dew;      // всегда существует, но не заполняется для зон без точки росы (Улица)
     lv_obj_t* errBadge;
+    lv_obj_t* faceSlot;  // всегда существует (выравнивание колонок между зонами), лицо внутри — только если hasFace
+    FaceWidgets face;
     bool hasDew;
+    bool hasFace;  // лицо комфорта имеет смысл только там, где есть целевая влажность (Подпол)
 };
 
 lv_obj_t* g_uptimeLabel;
 lv_obj_t* g_wifiLabel;
 lv_obj_t* g_ramLabel;
 lv_obj_t* g_modeLabel;
+lv_obj_t* g_seasonLabel;
 lv_obj_t* g_banner;
 lv_obj_t* g_bannerLabel;
 lv_obj_t* g_cycleCountLabel;
@@ -58,14 +73,121 @@ lv_obj_t* buildModeButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb) 
 }
 
 const char* kZoneTitles[] = {
-    "Подпол 1",
-    "Подпол 2",
-    "Подпол 3",
+    "Приточка",
+    "Середина",
+    "Дальний угол",
     "Улица",
 };
 
 bool zoneHasDewPoint(SensorId id) {
     return isCrawlspaceSensor(id);
+}
+
+// Лицо комфорта показывает, насколько влажность зоны близка к rhTargetPercent
+// — эта величина осмысленна только для датчика, которым реально управляет
+// реле (см. relay.cpp: crawlRh сравнивается с cfg.rhTargetPercent). У "Улицы"
+// целевой влажности нет вовсе, поэтому там лицо не рисуется.
+bool zoneHasComfortFace(SensorId id) {
+    return id == SensorId::CrawlspaceIntake;
+}
+
+// Настроение лица по влажности относительно порога/гистерезиса реле —
+// специально не "полоса комфорта" (как на бытовых гигрометрах), а привязка
+// к реальной логике управления (relay.cpp): реле включается выше
+// rhTargetPercent и выключается ниже rhTargetPercent-hysteresisPercent, ниже
+// порога "слишком сухо" не бывает в принципе. Поэтому лицо веселее там, где
+// вентилятор точно не нужен, и мрачнее по мере приближения и превышения
+// порога, а не по расстоянию от какого-то "идеального" числа.
+enum class ComfortMood : uint8_t { Ideal, Good, High, VeryHigh };
+
+ComfortMood comfortMoodFor(float humidityPct, float targetPercent, float hysteresisPercent) {
+    // Строго "<", а не "<=" — relay.cpp останавливает реле по тому же
+    // сравнению (belowHysteresis = crawlRh < target-hysteresis), так что на
+    // самой границе реле ещё работает и лицо не должно уже улыбаться.
+    if (humidityPct < targetPercent - hysteresisPercent) return ComfortMood::Ideal;
+    if (humidityPct <= targetPercent) return ComfortMood::Good;
+    if (humidityPct <= targetPercent + hysteresisPercent) return ComfortMood::High;
+    return ComfortMood::VeryHigh;
+}
+
+FaceWidgets buildFace(lv_obj_t* slot) {
+    FaceWidgets f{};
+
+    f.face = lv_obj_create(slot);
+    lv_obj_remove_style_all(f.face);
+    lv_obj_set_size(f.face, 28, 28);
+    lv_obj_set_style_radius(f.face, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(f.face, LV_OPA_COVER, 0);
+    lv_obj_center(f.face);
+
+    f.eyeL = lv_obj_create(f.face);
+    lv_obj_remove_style_all(f.eyeL);
+    lv_obj_set_size(f.eyeL, 3, 3);
+    lv_obj_set_style_radius(f.eyeL, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(f.eyeL, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(f.eyeL, lv_color_hex(0x2A2A2A), 0);
+    lv_obj_align(f.eyeL, LV_ALIGN_TOP_LEFT, 6, 8);
+
+    f.eyeR = lv_obj_create(f.face);
+    lv_obj_remove_style_all(f.eyeR);
+    lv_obj_set_size(f.eyeR, 3, 3);
+    lv_obj_set_style_radius(f.eyeR, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(f.eyeR, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(f.eyeR, lv_color_hex(0x2A2A2A), 0);
+    lv_obj_align(f.eyeR, LV_ALIGN_TOP_RIGHT, -6, 8);
+
+    // Рот — индикаторная дуга lv_arc без фона и без "ручки": lv_arc_set_angles
+    // напрямую задаёт углы индикатора (широкая нижняя дуга = улыбка, верхняя
+    // = недовольство), в обход обычной логики value/range — рту не нужно
+    // "значение", только форма.
+    f.mouth = lv_arc_create(f.face);
+    lv_obj_remove_style_all(f.mouth);
+    lv_obj_set_size(f.mouth, 16, 16);
+    lv_obj_set_style_arc_opa(f.mouth, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(f.mouth, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(f.mouth, lv_color_hex(0x2A2A2A), LV_PART_INDICATOR);
+    lv_obj_set_style_arc_rounded(f.mouth, true, LV_PART_INDICATOR);
+    lv_obj_clear_flag(f.mouth, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(f.mouth, LV_ALIGN_BOTTOM_MID, 0, -4);
+
+    // Скрыто до первого update() с валидными данными — иначе один кадр
+    // после старта виден недокрашенный кружок без настроения.
+    lv_obj_add_flag(f.face, LV_OBJ_FLAG_HIDDEN);
+
+    return f;
+}
+
+void applyComfortMood(const FaceWidgets& f, ComfortMood mood) {
+    lv_color_t faceColor;
+    int32_t angleStart;
+    int32_t angleEnd;
+
+    switch (mood) {
+        case ComfortMood::Ideal:
+            faceColor = lv_color_hex(0xFFD54A);  // жёлтый — сухо, реле точно не нужно
+            angleStart = 20;
+            angleEnd = 160;  // широкая улыбка
+            break;
+        case ComfortMood::Good:
+            faceColor = lv_color_hex(0xC9D24A);  // жёлто-зелёный — ещё в порядке
+            angleStart = 35;
+            angleEnd = 145;  // лёгкая улыбка
+            break;
+        case ComfortMood::High:
+            faceColor = lv_color_hex(0xF0A050);  // оранжевый — выше порога, реле включается
+            angleStart = 215;
+            angleEnd = 325;  // лёгкое недовольство
+            break;
+        case ComfortMood::VeryHigh:
+        default:
+            faceColor = lv_color_hex(0xE05A5A);  // красный — заметно выше порога
+            angleStart = 200;
+            angleEnd = 340;  // явное недовольство
+            break;
+    }
+
+    lv_obj_set_style_bg_color(f.face, faceColor, 0);
+    lv_arc_set_angles(f.mouth, angleStart, angleEnd);
 }
 
 // Одна зона — одна горизонтальная строка на всю ширину экрана: title | value
@@ -74,7 +196,7 @@ bool zoneHasDewPoint(SensorId id) {
 // на 3 строки текста, отсюда обрезанные подписи и невидимый бейдж ERR на
 // фото с платы. Список строк вместо карточек использует свободную ширину
 // экрана вместо тесной высоты.
-ZonePanelWidgets buildZoneRow(lv_obj_t* parent, const char* title, bool hasDew) {
+ZonePanelWidgets buildZoneRow(lv_obj_t* parent, const char* title, bool hasDew, bool hasFace) {
     lv_obj_t* row = lv_obj_create(parent);
     lv_obj_set_width(row, LV_PCT(100));
     lv_obj_set_flex_grow(row, 1);
@@ -114,6 +236,17 @@ ZonePanelWidgets buildZoneRow(lv_obj_t* parent, const char* title, bool hasDew) 
     lv_label_set_long_mode(w.dew, LV_LABEL_LONG_DOT);
     w.hasDew = hasDew;
 
+    // Слот фиксированной ширины создаётся в обеих строках (даже без лица)
+    // ради выравнивания колонок между зонами — тот же приём, что и с dew
+    // выше (виджет есть всегда, содержимое — не всегда).
+    w.faceSlot = lv_obj_create(row);
+    lv_obj_remove_style_all(w.faceSlot);
+    lv_obj_set_size(w.faceSlot, 28, 28);
+    w.hasFace = hasFace;
+    if (hasFace) {
+        w.face = buildFace(w.faceSlot);
+    }
+
     w.errBadge = lv_label_create(row);
     lv_obj_set_style_text_font(w.errBadge, &font_ru_14, 0);
     lv_obj_set_style_text_color(w.errBadge, lv_color_hex(0xE04040), 0);
@@ -133,7 +266,8 @@ void formatUptime(char* out, size_t outSize, uint32_t ms) {
               (unsigned long)mins);
 }
 
-void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r) {
+void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r, const RuntimeSettings& settings,
+                      bool relayOn) {
     char buf[32];
 
     if (r.valid) {
@@ -153,6 +287,28 @@ void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r) {
     }
 
     lv_label_set_text(w.errBadge, r.error ? "ERR" : "");
+
+    if (w.hasFace) {
+        // Пока нет валидных данных (первые секунды после старта) или датчик
+        // ошибается — лицо прячем целиком, а не рисуем "нейтральное":
+        // настроение без опоры на реальное число только вводило бы в
+        // заблуждение.
+        if (r.valid && !r.error) {
+            lv_obj_clear_flag(w.face.face, LV_OBJ_FLAG_HIDDEN);
+            ComfortMood mood =
+                comfortMoodFor(r.humidityPct, settings.rhTargetPercent, settings.hysteresisPercent);
+            // Реле умеет продолжать работать некоторое время уже после того,
+            // как влажность опустилась ниже порога (minRuntimeMs в
+            // relay.cpp защищает его от износа при частых включениях) — всё
+            // это время лицо не должно радоваться раньше вентилятора.
+            if (relayOn && static_cast<uint8_t>(mood) < static_cast<uint8_t>(ComfortMood::High)) {
+                mood = ComfortMood::High;
+            }
+            applyComfortMood(w.face, mood);
+        } else {
+            lv_obj_add_flag(w.face.face, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 }
 
 // Баннер намеренно не показывает причину простоя (мороз/конденсат/сбой
@@ -162,6 +318,18 @@ void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r) {
 lv_color_t bannerColorFor(bool relayOn) {
     return relayOn ? lv_color_hex(0x2E8B45)    // зелёный
                    : lv_color_hex(0x3A4A5A);   // серо-синий
+}
+
+// Сезон, под который сейчас подобраны пороги (см. season.h) — только для
+// информации на дашборде, не влияет на сам алгоритм осушения.
+const char* seasonRuLabel(Season::Id season) {
+    switch (season) {
+        case Season::Id::Winter: return "ЗИМА";
+        case Season::Id::Spring: return "ВЕСНА";
+        case Season::Id::Summer: return "ЛЕТО";
+        case Season::Id::Autumn: return "ОСЕНЬ";
+    }
+    return "?";
 }
 
 }  // namespace
@@ -198,6 +366,11 @@ void build(lv_obj_t* parent) {
     lv_obj_set_style_text_color(g_modeLabel, lv_color_hex(0x8AA0B8), 0);
     lv_label_set_text(g_modeLabel, "АВТО");
 
+    g_seasonLabel = lv_label_create(statusBar);
+    lv_obj_set_style_text_font(g_seasonLabel, &font_ru_14, 0);
+    lv_obj_set_style_text_color(g_seasonLabel, lv_color_hex(0x8AA0B8), 0);
+    lv_label_set_text(g_seasonLabel, "");
+
     // --- Кнопки переключения режима (дублируют веб-интерфейс) ---
     lv_obj_t* modeRow = lv_obj_create(scr);
     lv_obj_set_size(modeRow, LV_PCT(100), 34);
@@ -226,7 +399,7 @@ void build(lv_obj_t* parent) {
 
     for (size_t i = 0; i < static_cast<size_t>(SensorId::Count); i++) {
         SensorId id = static_cast<SensorId>(i);
-        g_panels[i] = buildZoneRow(list, kZoneTitles[i], zoneHasDewPoint(id));
+        g_panels[i] = buildZoneRow(list, kZoneTitles[i], zoneHasDewPoint(id), zoneHasComfortFace(id));
     }
 
     // --- Баннер статуса: ВКЛ/ВЫКЛ сверху, счётчик запусков снизу ---
@@ -274,7 +447,7 @@ void update() {
     if (!ShaState::getSnapshot(snapshot)) return;
 
     for (size_t i = 0; i < static_cast<size_t>(SensorId::Count); i++) {
-        updateZonePanel(g_panels[i], snapshot.readings[i]);
+        updateZonePanel(g_panels[i], snapshot.readings[i], snapshot.settings, snapshot.relay.relayOn);
     }
 
     char buf[48];
@@ -293,6 +466,12 @@ void update() {
     lv_label_set_text(g_ramLabel, buf);
 
     lv_label_set_text(g_modeLabel, Relay::modeBadgeText(snapshot.settings.mode));
+    if (snapshot.settings.seasonAutoEnabled) {
+        lv_label_set_text(g_seasonLabel, seasonRuLabel(Season::current()));
+        lv_obj_clear_flag(g_seasonLabel, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(g_seasonLabel, LV_OBJ_FLAG_HIDDEN);
+    }
 
     for (size_t i = 0; i < 3; i++) {
         bool active = (i == static_cast<size_t>(snapshot.settings.mode));

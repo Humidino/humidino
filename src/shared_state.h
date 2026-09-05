@@ -70,6 +70,13 @@ struct RuntimeSettings {
     uint32_t minRuntimeMs = MIN_RUNTIME_MS;
     uint32_t minPauseMs = MIN_PAUSE_MS;
     OperatingMode mode = OperatingMode::Auto;
+    // Если true — фоновая задача Season (см. season.h) сама подставляет сюда
+    // пороги/тайминги текущего календарного сезона (профили подобраны под
+    // климат Лотошино, МО, см. docs/SEASONAL_LOTOSHINO.md) при каждой смене
+    // сезона. Ручное редактирование полей выше при этом не запрещено, но
+    // будет перезаписано на следующей смене сезона — это ортогональный
+    // "автопилот", а не разовая настройка. По умолчанию включён.
+    bool seasonAutoEnabled = true;
 };
 
 struct SystemState {

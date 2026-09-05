@@ -1,466 +1,943 @@
 <!doctype html>
 <html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Humidino</title>
-<style>
-  :root {
-    --bg: #0d1117; --panel: #161b22; --panel2: #1b2128; --border: #2a323c;
-    --text: #e8e8e8; --muted: #8aa0b8; --accent: #2e8b45; --accent2: #3a7dd6;
-    --warn: #c97a1e; --err: #e04040;
-  }
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--text); margin:0; padding:16px; max-width:720px; margin-inline:auto; }
-  h1 { font-size:20px; margin:0 0 16px; display:flex; align-items:center; gap:8px; }
-  h1 .dot { width:8px; height:8px; border-radius:50%; background:var(--muted); }
-  h1 .dot.online { background:var(--accent); }
-  section { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:14px; }
-  section h2 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 12px; font-weight:600; }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Humidino</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --panel: #161b22;
+        --panel2: #1b2128;
+        --border: #2a323c;
+        --text: #e8e8e8;
+        --muted: #8aa0b8;
+        --accent: #2e8b45;
+        --accent2: #3a7dd6;
+        --warn: #c97a1e;
+        --err: #e04040;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system,
+          Segoe UI,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        margin: 0;
+        padding: 16px;
+        max-width: 720px;
+        margin-inline: auto;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      h1 .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      h1 .dot.online {
+        background: var(--accent);
+      }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+        margin-bottom: 14px;
+      }
+      section h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        margin: 0 0 12px;
+        font-weight: 600;
+      }
 
-  /* --- Баннер статуса + анимированный вентилятор --- */
-  #statusCard { display:flex; align-items:center; gap:16px; padding:18px; border-radius:12px; transition:background .3s; }
-  #fanIcon { width:56px; height:56px; flex-shrink:0; }
-  #fanIcon svg { width:100%; height:100%; }
-  #fanIcon.spinning svg { animation: spin 1.1s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  #statusText { flex:1; }
-  #bannerLabel { font-size:20px; font-weight:700; margin-bottom:2px; }
-  #modeBadge { font-size:12px; color:rgba(255,255,255,.75); text-transform:uppercase; letter-spacing:.03em; }
+      /* --- Баннер статуса + анимированный вентилятор --- */
+      #statusCard {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 18px;
+        border-radius: 12px;
+        transition: background 0.3s;
+      }
+      #fanIcon {
+        width: 56px;
+        height: 56px;
+        flex-shrink: 0;
+      }
+      #fanIcon svg {
+        width: 100%;
+        height: 100%;
+      }
+      #fanIcon.spinning svg {
+        animation: spin 1.1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      #statusText {
+        flex: 1;
+      }
+      #bannerLabel {
+        font-size: 20px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      #modeBadge {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.75);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      #seasonBadge {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.55);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-top: 2px;
+      }
 
-  /* --- Переключатель режима --- */
-  .mode-switch { display:flex; gap:6px; }
-  .mode-switch button { flex:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer; font-size:13px; }
-  .mode-switch button.active { background:var(--accent2); border-color:var(--accent2); color:white; font-weight:600; }
+      /* --- Автосезон --- */
+      .season-toggle {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--border);
+      }
+      .season-toggle .label {
+        flex: 1;
+        font-size: 13px;
+      }
+      .season-toggle .label .hint {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 2px;
+      }
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+        flex-shrink: 0;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .switch .slider {
+        position: absolute;
+        inset: 0;
+        background: var(--panel2);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        cursor: pointer;
+        transition: 0.2s;
+      }
+      .switch .slider::before {
+        content: "";
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        left: 2px;
+        top: 2px;
+        background: var(--text);
+        border-radius: 50%;
+        transition: 0.2s;
+      }
+      .switch input:checked + .slider {
+        background: var(--accent2);
+        border-color: var(--accent2);
+      }
+      .switch input:checked + .slider::before {
+        transform: translateX(20px);
+        background: white;
+      }
 
-  /* --- Зоны --- */
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  .card { background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px; }
-  .card h3 { font-size:13px; margin:0 0 6px; color:var(--muted); font-weight:normal; }
-  .card .val { font-size:18px; }
-  .err { color:var(--err); font-weight:bold; }
+      /* --- Переключатель режима --- */
+      .mode-switch {
+        display: flex;
+        gap: 6px;
+      }
+      .mode-switch button {
+        flex: 1;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--panel2);
+        color: var(--text);
+        cursor: pointer;
+        font-size: 13px;
+      }
+      .mode-switch button.active {
+        background: var(--accent2);
+        border-color: var(--accent2);
+        color: white;
+        font-weight: 600;
+      }
 
-  /* --- Пресеты --- */
-  .preset-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); }
-  .preset-row:last-child { border-bottom:none; }
-  .preset-row .name { flex:1; font-size:14px; }
-  .preset-row button { padding:6px 10px; font-size:12px; border-radius:6px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer; }
-  .preset-row button.apply { border-color:var(--accent2); color:var(--accent2); }
-  .preset-row button.delete { border-color:var(--err); color:var(--err); }
-  #presetEmpty { color:var(--muted); font-size:13px; padding:6px 0; }
+      /* --- Зоны --- */
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .card {
+        background: var(--panel2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+      }
+      .card h3 {
+        font-size: 13px;
+        margin: 0 0 6px;
+        color: var(--muted);
+        font-weight: normal;
+      }
+      .card .val {
+        font-size: 18px;
+      }
+      .err {
+        color: var(--err);
+        font-weight: bold;
+      }
 
-  /* --- Формы --- */
-  form label { display:block; margin:10px 0 4px; font-size:13px; color:var(--muted); }
-  form input { width:100%; box-sizing:border-box; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; }
-  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  button[type=submit], .btn-primary { margin-top:14px; padding:10px 18px; border:none; border-radius:8px; background:var(--accent); color:white; cursor:pointer; font-size:14px; font-weight:600; }
-  .btn-secondary { margin-top:14px; margin-left:8px; padding:10px 18px; border:1px solid var(--border); border-radius:8px; background:var(--panel2); color:var(--text); cursor:pointer; font-size:14px; }
-  .hint { font-size:12px; color:var(--muted); margin-top:6px; }
-  .saved-flash { font-size:12px; color:var(--accent); margin-left:10px; opacity:0; transition:opacity .2s; }
-  .saved-flash.show { opacity:1; }
+      /* --- Пресеты --- */
+      .preset-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .preset-row:last-child {
+        border-bottom: none;
+      }
+      .preset-row .name {
+        flex: 1;
+        font-size: 14px;
+      }
+      .preset-row button {
+        padding: 6px 10px;
+        font-size: 12px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--panel2);
+        color: var(--text);
+        cursor: pointer;
+      }
+      .preset-row button.apply {
+        border-color: var(--accent2);
+        color: var(--accent2);
+      }
+      .preset-row button.delete {
+        border-color: var(--err);
+        color: var(--err);
+      }
+      #presetEmpty {
+        color: var(--muted);
+        font-size: 13px;
+        padding: 6px 0;
+      }
 
-  /* --- Аналитика / журнал запусков --- */
-  .stats-cards { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; }
-  .stats-card { background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px; }
-  .stats-card .num { font-size:22px; font-weight:700; }
-  .stats-card .lbl { font-size:12px; color:var(--muted); margin-top:2px; }
-  #historyTimeWarning { display:none; font-size:12px; color:var(--warn); margin-bottom:10px; }
-  #historyChart { margin-bottom:12px; }
-  .history-row { padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
-  .history-row:last-child { border-bottom:none; }
-  .history-top { display:flex; align-items:center; gap:8px; }
-  .history-time { font-weight:600; }
-  .history-dur { color:var(--accent2); }
-  .history-reason { color:var(--muted); margin-left:auto; font-size:12px; }
-  .history-zones { display:flex; flex-direction:column; gap:2px; margin-top:3px; color:var(--muted); font-size:12px; }
-  #historyEmpty { color:var(--muted); font-size:13px; padding:6px 0; }
-</style>
-</head>
-<body>
-<h1><span class="dot" id="wifiDot"></span>Humidino — контроль подпола</h1>
+      /* --- Формы --- */
+      form label {
+        display: block;
+        margin: 10px 0 4px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      form input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--panel2);
+        color: var(--text);
+        font-size: 14px;
+      }
+      .row2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      button[type="submit"],
+      .btn-primary {
+        margin-top: 14px;
+        padding: 10px 18px;
+        border: none;
+        border-radius: 8px;
+        background: var(--accent);
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .btn-secondary {
+        margin-top: 14px;
+        margin-left: 8px;
+        padding: 10px 18px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel2);
+        color: var(--text);
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+      .saved-flash {
+        font-size: 12px;
+        color: var(--accent);
+        margin-left: 10px;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      .saved-flash.show {
+        opacity: 1;
+      }
 
-<section>
-  <div id="statusCard">
-    <div id="fanIcon">
-      <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="50" cy="50" r="6" fill="white"/>
-        <g fill="white" opacity="0.9">
-          <path d="M50 50 C50 20, 30 8, 14 14 C22 30, 34 46, 50 50 Z"/>
-          <path d="M50 50 C80 50, 92 30, 86 14 C70 22, 54 34, 50 50 Z"/>
-          <path d="M50 50 C50 80, 70 92, 86 86 C78 70, 66 54, 50 50 Z"/>
-          <path d="M50 50 C20 50, 8 70, 14 86 C30 78, 46 66, 50 50 Z"/>
-        </g>
-      </svg>
-    </div>
-    <div id="statusText">
-      <div id="bannerLabel">—</div>
-      <div id="modeBadge">АВТО</div>
-    </div>
-  </div>
-  <div class="mode-switch" style="margin-top:14px;">
-    <button data-mode="auto">Авто</button>
-    <button data-mode="manual_on">Вкл</button>
-    <button data-mode="manual_off">Выкл</button>
-  </div>
-</section>
+      /* --- Аналитика / журнал запусков --- */
+      .stats-cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .stats-card {
+        background: var(--panel2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+      }
+      .stats-card .num {
+        font-size: 22px;
+        font-weight: 700;
+      }
+      .stats-card .lbl {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      #historyTimeWarning {
+        display: none;
+        font-size: 12px;
+        color: var(--warn);
+        margin-bottom: 10px;
+      }
+      #historyChart {
+        margin-bottom: 12px;
+      }
+      .history-row {
+        padding: 8px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+      }
+      .history-row:last-child {
+        border-bottom: none;
+      }
+      .history-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .history-time {
+        font-weight: 600;
+      }
+      .history-dur {
+        color: var(--accent2);
+      }
+      .history-reason {
+        color: var(--muted);
+        margin-left: auto;
+        font-size: 12px;
+      }
+      .history-zones {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      #historyEmpty {
+        color: var(--muted);
+        font-size: 13px;
+        padding: 6px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1><span class="dot" id="wifiDot"></span>Humidino — контроль подпола</h1>
 
-<section>
-  <h2>Зоны</h2>
-  <div class="grid" id="zones"></div>
-</section>
-
-<section>
-  <h2>Пресеты порогов</h2>
-  <div id="presetList"><div id="presetEmpty">Пока нет сохранённых пресетов</div></div>
-  <button class="btn-primary" id="saveAsPresetBtn" type="button">Сохранить текущие настройки как пресет…</button>
-</section>
-
-<section>
-  <h2>Пороги и тайминги</h2>
-  <form id="settingsForm">
-    <div class="row2">
-      <div>
-        <label>Порог влажности подпола, %</label>
-        <input type="number" step="0.1" id="rh_target">
+    <section>
+      <div id="statusCard">
+        <div id="fanIcon">
+          <svg
+            viewBox="0 0 100 100"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <circle cx="50" cy="50" r="6" fill="white" />
+            <g fill="white" opacity="0.9">
+              <path d="M50 50 C50 20, 30 8, 14 14 C22 30, 34 46, 50 50 Z" />
+              <path d="M50 50 C80 50, 92 30, 86 14 C70 22, 54 34, 50 50 Z" />
+              <path d="M50 50 C50 80, 70 92, 86 86 C78 70, 66 54, 50 50 Z" />
+              <path d="M50 50 C20 50, 8 70, 14 86 C30 78, 46 66, 50 50 Z" />
+            </g>
+          </svg>
+        </div>
+        <div id="statusText">
+          <div id="bannerLabel">—</div>
+          <div id="modeBadge">АВТО</div>
+          <div id="seasonBadge"></div>
+        </div>
       </div>
-      <div>
-        <label>Гистерезис, %</label>
-        <input type="number" step="0.1" id="hysteresis_pct">
+      <div class="mode-switch" style="margin-top: 14px">
+        <button data-mode="auto">Авто</button>
+        <button data-mode="manual_on">Вкл</button>
+        <button data-mode="manual_off">Выкл</button>
       </div>
-    </div>
-    <label>Защита от замерзания, °C</label>
-    <input type="number" step="0.1" id="freeze_c">
-    <div class="row2">
-      <div>
-        <label>Мин. время работы, мин</label>
-        <input type="number" step="1" min="0" id="min_runtime_min">
+    </section>
+
+    <section>
+      <h2>Зоны</h2>
+      <div class="grid" id="zones"></div>
+    </section>
+
+    <section>
+      <h2>Пресеты порогов</h2>
+      <div id="presetList">
+        <div id="presetEmpty">Пока нет сохранённых пресетов</div>
       </div>
-      <div>
-        <label>Мин. пауза между включениями, мин</label>
-        <input type="number" step="1" min="0" id="min_pause_min">
+      <button class="btn-primary" id="saveAsPresetBtn" type="button">
+        Сохранить текущие настройки как пресет…
+      </button>
+    </section>
+
+    <section>
+      <h2>Пороги и тайминги</h2>
+      <form id="settingsForm">
+        <div class="row2">
+          <div>
+            <label>Порог влажности подпола, %</label>
+            <input type="number" step="0.1" id="rh_target" />
+          </div>
+          <div>
+            <label>Гистерезис, %</label>
+            <input type="number" step="0.1" id="hysteresis_pct" />
+          </div>
+        </div>
+        <label>Защита от замерзания, °C</label>
+        <input type="number" step="0.1" id="freeze_c" />
+        <div class="row2">
+          <div>
+            <label>Мин. время работы, мин</label>
+            <input type="number" step="1" min="0" id="min_runtime_min" />
+          </div>
+          <div>
+            <label>Мин. пауза между включениями, мин</label>
+            <input type="number" step="1" min="0" id="min_pause_min" />
+          </div>
+        </div>
+        <button type="submit">
+          Сохранить<span class="saved-flash" id="settingsSaved"
+            >✓ сохранено</span
+          >
+        </button>
+        <div class="season-toggle">
+          <span class="label"
+            >Автосезон (Лотошино, МО)
+            <span class="hint"
+              >Сама подставляет пороги и тайминги выше под текущий календарный
+              сезон — см. docs/SEASONAL_LOTOSHINO.md. Ручные значения выше при
+              включённом автосезоне держатся только до ближайшей смены
+              сезона.</span
+            >
+          </span>
+          <label class="switch">
+            <input type="checkbox" id="season_auto" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </form>
+    </section>
+
+    <section>
+      <h2>Аналитика и статистика</h2>
+      <div id="historyTimeWarning">
+        Время устройства ещё не синхронизировано по NTP (нужен доступ в
+        интернет) — метки времени недавних запусков могут быть недоступны.
       </div>
-    </div>
-    <button type="submit">Сохранить<span class="saved-flash" id="settingsSaved">✓ сохранено</span></button>
-  </form>
-</section>
+      <div class="stats-cards">
+        <div class="stats-card">
+          <div class="num" id="statRunsToday">--</div>
+          <div class="lbl">запусков сегодня</div>
+        </div>
+        <div class="stats-card">
+          <div class="num" id="statRuntimeToday">--</div>
+          <div class="lbl">работы сегодня</div>
+        </div>
+        <div class="stats-card">
+          <div class="num" id="statRunsTotal">--</div>
+          <div class="lbl">запусков всего</div>
+        </div>
+        <div class="stats-card">
+          <div class="num" id="statLogCount">--</div>
+          <div class="lbl">записей в журнале</div>
+        </div>
+      </div>
+      <div id="historyChart"></div>
+      <div id="historyEmpty">Пока нет ни одного запуска</div>
+      <div id="historyRows"></div>
+    </section>
 
-<section>
-  <h2>Аналитика и статистика</h2>
-  <div id="historyTimeWarning">Время устройства ещё не синхронизировано по NTP (нужен доступ в интернет) — метки времени недавних запусков могут быть недоступны.</div>
-  <div class="stats-cards">
-    <div class="stats-card"><div class="num" id="statRunsToday">--</div><div class="lbl">запусков сегодня</div></div>
-    <div class="stats-card"><div class="num" id="statRuntimeToday">--</div><div class="lbl">работы сегодня</div></div>
-    <div class="stats-card"><div class="num" id="statRunsTotal">--</div><div class="lbl">запусков всего</div></div>
-    <div class="stats-card"><div class="num" id="statLogCount">--</div><div class="lbl">записей в журнале</div></div>
-  </div>
-  <div id="historyChart"></div>
-  <div id="historyEmpty">Пока нет ни одного запуска</div>
-  <div id="historyRows"></div>
-</section>
+    <script>
+      const zoneNames = {
+        crawl_intake: "Подпол (приточка)",
+        crawl_mid: "Подпол (середина)",
+        crawl_far: "Подпол (дальний угол)",
+        outside: "Улица",
+      };
+      const bannerText = {
+        idle: "ОЖИДАНИЕ",
+        running: "РАБОТА",
+        locked_condensation: "ЗАПРЕТ ПО КОНДЕНСАТУ",
+        locked_freeze: "ЗАПРЕТ ПО МОРОЗУ",
+        min_pause_hold: "ОЖИДАНИЕ",
+        locked_sensor_fault: "ОШИБКА ДАТЧИКА",
+      };
+      const bannerColor = {
+        idle: "#2a3542",
+        running: "#1f5c33",
+        locked_condensation: "#5c4319",
+        locked_freeze: "#5c4319",
+        min_pause_hold: "#2a3542",
+        locked_sensor_fault: "#5c1f1f",
+      };
+      const modeText = {
+        auto: "АВТО",
+        manual_on: "РУЧНОЕ ВКЛ",
+        manual_off: "РУЧНОЕ ВЫКЛ",
+      };
+      const seasonText = {
+        winter: "Зима",
+        spring: "Весна",
+        summer: "Лето",
+        autumn: "Осень",
+      };
 
-<script>
-const zoneNames = {
-  crawl_zone1: "Подпол 1",
-  crawl_zone2: "Подпол 2",
-  crawl_zone3: "Подпол 3",
-  outside: "Улица",
-};
-const bannerText = {
-  idle: "ОЖИДАНИЕ", running: "РАБОТА",
-  locked_condensation: "ЗАПРЕТ ПО КОНДЕНСАТУ", locked_freeze: "ЗАПРЕТ ПО МОРОЗУ",
-  min_pause_hold: "ОЖИДАНИЕ", locked_sensor_fault: "ОШИБКА ДАТЧИКА",
-};
-const bannerColor = {
-  idle: "#2a3542", running: "#1f5c33",
-  locked_condensation: "#5c4319", locked_freeze: "#5c4319",
-  min_pause_hold: "#2a3542", locked_sensor_fault: "#5c1f1f",
-};
-const modeText = { auto: "АВТО", manual_on: "РУЧНОЕ ВКЛ", manual_off: "РУЧНОЕ ВЫКЛ" };
+      let currentMode = "auto";
 
-let currentMode = "auto";
+      function fmtMinRuntime(ms) {
+        return Math.round(ms / 60000);
+      }
 
-function fmtMinRuntime(ms) { return Math.round(ms / 60000); }
+      async function refreshState() {
+        try {
+          const r = await fetch("/api/state");
+          const s = await r.json();
 
-async function refreshState() {
-  try {
-    const r = await fetch('/api/state');
-    const s = await r.json();
+          document
+            .getElementById("wifiDot")
+            .classList.toggle(
+              "online",
+              s.wifi_rssi !== undefined && s.wifi_rssi !== 0,
+            );
 
-    document.getElementById('wifiDot').classList.toggle('online', s.wifi_rssi !== undefined && s.wifi_rssi !== 0);
+          const stateKey = s.relay.state_str || "idle";
+          document.getElementById("bannerLabel").textContent =
+            bannerText[stateKey] ?? "?";
+          document.getElementById("statusCard").style.background =
+            bannerColor[stateKey] ?? "#2a3542";
+          document.getElementById("seasonBadge").textContent =
+            "Сезон: " + (seasonText[s.season] || s.season || "—");
 
-    const stateKey = s.relay.state_str || 'idle';
-    document.getElementById('bannerLabel').textContent = bannerText[stateKey] ?? '?';
-    document.getElementById('statusCard').style.background = bannerColor[stateKey] ?? '#2a3542';
+          const fan = document.getElementById("fanIcon");
+          fan.classList.toggle("spinning", !!s.relay.on);
+          fan.style.opacity = s.relay.on ? "1" : ".35";
 
-    const fan = document.getElementById('fanIcon');
-    fan.classList.toggle('spinning', !!s.relay.on);
-    fan.style.opacity = s.relay.on ? '1' : '.35';
+          const zonesEl = document.getElementById("zones");
+          zonesEl.innerHTML = "";
+          for (const key in zoneNames) {
+            const z = s.zones[key];
+            const div = document.createElement("div");
+            div.className = "card";
+            let html = `<h3>${zoneNames[key]}</h3><div class="val">${z.temp_c.toFixed(1)}°C / ${z.rh_pct.toFixed(1)}%</div>`;
+            if (z.dew_c !== undefined)
+              html += `<div>Точка росы: ${z.dew_c.toFixed(1)}°C</div>`;
+            if (z.error) html += `<div class="err">ERR</div>`;
+            div.innerHTML = html;
+            zonesEl.appendChild(div);
+          }
+        } catch (e) {
+          /* временный сбой — повторится на следующем тике */
+        }
+      }
 
-    const zonesEl = document.getElementById('zones');
-    zonesEl.innerHTML = '';
-    for (const key in zoneNames) {
-      const z = s.zones[key];
-      const div = document.createElement('div');
-      div.className = 'card';
-      let html = `<h3>${zoneNames[key]}</h3><div class="val">${z.temp_c.toFixed(1)}°C / ${z.rh_pct.toFixed(1)}%</div>`;
-      if (z.dew_c !== undefined) html += `<div>Точка росы: ${z.dew_c.toFixed(1)}°C</div>`;
-      if (z.error) html += `<div class="err">ERR</div>`;
-      div.innerHTML = html;
-      zonesEl.appendChild(div);
-    }
-  } catch (e) { /* временный сбой — повторится на следующем тике */ }
-}
+      function setModeButtons(mode) {
+        currentMode = mode;
+        document.getElementById("modeBadge").textContent =
+          modeText[mode] ?? mode;
+        document.querySelectorAll(".mode-switch button").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.mode === mode);
+        });
+      }
 
-function setModeButtons(mode) {
-  currentMode = mode;
-  document.getElementById('modeBadge').textContent = modeText[mode] ?? mode;
-  document.querySelectorAll('.mode-switch button').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.mode === mode);
-  });
-}
+      async function setMode(mode) {
+        setModeButtons(mode); // мгновенный отклик, не дожидаясь ответа сервера
+        await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode }),
+        });
+      }
 
-async function setMode(mode) {
-  setModeButtons(mode);  // мгновенный отклик, не дожидаясь ответа сервера
-  await fetch('/api/settings', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode }),
-  });
-}
+      document.querySelectorAll(".mode-switch button").forEach((btn) => {
+        btn.addEventListener("click", () => setMode(btn.dataset.mode));
+      });
 
-document.querySelectorAll('.mode-switch button').forEach(btn => {
-  btn.addEventListener('click', () => setMode(btn.dataset.mode));
-});
+      async function loadSettings() {
+        const r = await fetch("/api/settings");
+        const s = await r.json();
+        document.getElementById("rh_target").value = s.rh_target;
+        document.getElementById("hysteresis_pct").value = s.hysteresis_pct;
+        document.getElementById("freeze_c").value = s.freeze_c;
+        document.getElementById("min_runtime_min").value = fmtMinRuntime(
+          s.min_runtime_ms,
+        );
+        document.getElementById("min_pause_min").value = fmtMinRuntime(
+          s.min_pause_ms,
+        );
+        document.getElementById("season_auto").checked = !!s.season_auto;
+        setModeButtons(s.mode || "auto");
+      }
 
-async function loadSettings() {
-  const r = await fetch('/api/settings');
-  const s = await r.json();
-  document.getElementById('rh_target').value = s.rh_target;
-  document.getElementById('hysteresis_pct').value = s.hysteresis_pct;
-  document.getElementById('freeze_c').value = s.freeze_c;
-  document.getElementById('min_runtime_min').value = fmtMinRuntime(s.min_runtime_ms);
-  document.getElementById('min_pause_min').value = fmtMinRuntime(s.min_pause_ms);
-  setModeButtons(s.mode || 'auto');
-}
+      // Отдельно от формы — переключается сразу, без нажатия "Сохранить" (как и
+      // кнопки режима выше). Если автосезон только что включили, устройство сразу
+      // подставляет пороги текущего сезона — перечитываем форму, чтобы показать их.
+      document
+        .getElementById("season_auto")
+        .addEventListener("change", async (ev) => {
+          try {
+            const response = await fetch("/api/settings", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ season_auto: ev.target.checked }),
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            await loadSettings();
+          } catch (e) {
+            await loadSettings().catch(() => {});
+            alert("Не удалось сохранить настройки");
+          }
+        });
 
-function flash(id) {
-  const el = document.getElementById(id);
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 1500);
-}
+      function flash(id) {
+        const el = document.getElementById(id);
+        el.classList.add("show");
+        setTimeout(() => el.classList.remove("show"), 1500);
+      }
 
-document.getElementById('settingsForm').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const body = {
-    rh_target: parseFloat(document.getElementById('rh_target').value),
-    hysteresis_pct: parseFloat(document.getElementById('hysteresis_pct').value),
-    freeze_c: parseFloat(document.getElementById('freeze_c').value),
-    min_runtime_ms: Math.round(parseFloat(document.getElementById('min_runtime_min').value) * 60000),
-    min_pause_ms: Math.round(parseFloat(document.getElementById('min_pause_min').value) * 60000),
-  };
-  await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-  flash('settingsSaved');
-});
+      document
+        .getElementById("settingsForm")
+        .addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          const body = {
+            rh_target: parseFloat(document.getElementById("rh_target").value),
+            hysteresis_pct: parseFloat(
+              document.getElementById("hysteresis_pct").value,
+            ),
+            freeze_c: parseFloat(document.getElementById("freeze_c").value),
+            min_runtime_ms: Math.round(
+              parseFloat(document.getElementById("min_runtime_min").value) *
+                60000,
+            ),
+            min_pause_ms: Math.round(
+              parseFloat(document.getElementById("min_pause_min").value) *
+                60000,
+            ),
+          };
+          await fetch("/api/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          flash("settingsSaved");
+        });
 
-// --- Пресеты ---
-async function loadPresets() {
-  const r = await fetch('/api/presets');
-  const presets = await r.json();
-  const list = document.getElementById('presetList');
-  const empty = document.getElementById('presetEmpty');
-  list.querySelectorAll('.preset-row').forEach(el => el.remove());
-  if (presets.length === 0) {
-    empty.style.display = '';
-    return;
-  }
-  empty.style.display = 'none';
-  for (const p of presets) {
-    const row = document.createElement('div');
-    row.className = 'preset-row';
+      // --- Пресеты ---
+      async function loadPresets() {
+        const r = await fetch("/api/presets");
+        const presets = await r.json();
+        const list = document.getElementById("presetList");
+        const empty = document.getElementById("presetEmpty");
+        list.querySelectorAll(".preset-row").forEach((el) => el.remove());
+        if (presets.length === 0) {
+          empty.style.display = "";
+          return;
+        }
+        empty.style.display = "none";
+        for (const p of presets) {
+          const row = document.createElement("div");
+          row.className = "preset-row";
 
-    const name = document.createElement('span');
-    name.className = 'name';
-    name.textContent = p.name;
+          const name = document.createElement("span");
+          name.className = "name";
+          name.textContent = p.name;
 
-    const values = document.createElement('span');
-    values.style.cssText = 'color:var(--muted); font-size:12px;';
-    values.textContent = `${p.rh_target}% / гист. ${p.hysteresis_pct}%`;
+          const values = document.createElement("span");
+          values.style.cssText = "color:var(--muted); font-size:12px;";
+          values.textContent = `${p.rh_target}% / гист. ${p.hysteresis_pct}%`;
 
-    const apply = document.createElement('button');
-    apply.className = 'apply';
-    apply.type = 'button';
-    apply.textContent = 'Применить';
-    apply.addEventListener('click', async () => {
-      await fetch('/api/presets/apply', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name: p.name }) });
-      loadSettings();
-    });
+          const apply = document.createElement("button");
+          apply.className = "apply";
+          apply.type = "button";
+          apply.textContent = "Применить";
+          apply.addEventListener("click", async () => {
+            await fetch("/api/presets/apply", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: p.name }),
+            });
+            loadSettings();
+          });
 
-    const remove = document.createElement('button');
-    remove.className = 'delete';
-    remove.type = 'button';
-    remove.textContent = 'Удалить';
-    remove.addEventListener('click', async () => {
-      const updated = presets.filter(x => x.name !== p.name);
-      await fetch('/api/presets', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(updated) });
-      loadPresets();
-    });
+          const remove = document.createElement("button");
+          remove.className = "delete";
+          remove.type = "button";
+          remove.textContent = "Удалить";
+          remove.addEventListener("click", async () => {
+            const updated = presets.filter((x) => x.name !== p.name);
+            await fetch("/api/presets", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(updated),
+            });
+            loadPresets();
+          });
 
-    row.append(name, values, apply, remove);
-    list.appendChild(row);
-  }
-}
+          row.append(name, values, apply, remove);
+          list.appendChild(row);
+        }
+      }
 
-document.getElementById('saveAsPresetBtn').addEventListener('click', async () => {
-  const name = prompt('Название пресета:');
-  if (!name) return;
-  const r = await fetch('/api/presets');
-  const presets = (await r.json()).filter(p => p.name !== name);
-  presets.push({
-    name,
-    rh_target: parseFloat(document.getElementById('rh_target').value),
-    hysteresis_pct: parseFloat(document.getElementById('hysteresis_pct').value),
-    freeze_c: parseFloat(document.getElementById('freeze_c').value),
-    min_runtime_ms: Math.round(parseFloat(document.getElementById('min_runtime_min').value) * 60000),
-    min_pause_ms: Math.round(parseFloat(document.getElementById('min_pause_min').value) * 60000),
-  });
-  await fetch('/api/presets', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(presets) });
-  loadPresets();
-});
+      document
+        .getElementById("saveAsPresetBtn")
+        .addEventListener("click", async () => {
+          const name = prompt("Название пресета:");
+          if (!name) return;
+          const r = await fetch("/api/presets");
+          const presets = (await r.json()).filter((p) => p.name !== name);
+          presets.push({
+            name,
+            rh_target: parseFloat(document.getElementById("rh_target").value),
+            hysteresis_pct: parseFloat(
+              document.getElementById("hysteresis_pct").value,
+            ),
+            freeze_c: parseFloat(document.getElementById("freeze_c").value),
+            min_runtime_ms: Math.round(
+              parseFloat(document.getElementById("min_runtime_min").value) *
+                60000,
+            ),
+            min_pause_ms: Math.round(
+              parseFloat(document.getElementById("min_pause_min").value) *
+                60000,
+            ),
+          });
+          await fetch("/api/presets", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(presets),
+          });
+          loadPresets();
+        });
 
-// --- Аналитика / журнал запусков ---
-const stopReasonText = {
-  hysteresis_reached: 'По графику (влажность в норме)',
-  manual_off: 'Выключено вручную',
-  locked_freeze: 'Прервано: защита от замерзания',
-  locked_condensation: 'Прервано: защита от конденсата',
-  sensor_fault: 'Прервано: ошибка датчика',
-  interrupted: 'Прервано перезагрузкой устройства',
-};
-const kHistoryPageSize = 200;  // потолок одного запроса в web_server.cpp; график догружает следующие страницы
-const kHistoryDays = 14;
-let deviceTzOffsetSec = null;
+      // --- Аналитика / журнал запусков ---
+      const stopReasonText = {
+        hysteresis_reached: "По графику (влажность в норме)",
+        manual_off: "Выключено вручную",
+        locked_freeze: "Прервано: защита от замерзания",
+        locked_condensation: "Прервано: защита от конденсата",
+        sensor_fault: "Прервано: ошибка датчика",
+        interrupted: "Прервано перезагрузкой устройства",
+      };
+      const kHistoryPageSize = 200; // потолок одного запроса в web_server.cpp; график догружает следующие страницы
+      const kHistoryDays = 14;
+      let deviceTzOffsetSec = null;
 
-function fmtDurationSec(sec) {
-  if (!sec) return '—';
-  const m = Math.round(sec / 60);
-  if (m < 60) return `${m} мин`;
-  return `${Math.floor(m / 60)} ч ${m % 60} мин`;
-}
+      function fmtDurationSec(sec) {
+        if (!sec) return "—";
+        const m = Math.round(sec / 60);
+        if (m < 60) return `${m} мин`;
+        return `${Math.floor(m / 60)} ч ${m % 60} мин`;
+      }
 
-function fmtEpoch(epoch) {
-  if (!epoch) return '—';
-  return new Date(epoch * 1000).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
+      function fmtEpoch(epoch) {
+        if (!epoch) return "—";
+        return new Date(epoch * 1000).toLocaleString("ru-RU", {
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
 
-function fmtValue(v, digits = 1) {
-  return (v === null || v === undefined || Number.isNaN(v)) ? '—' : v.toFixed(digits);
-}
+      function fmtValue(v, digits = 1) {
+        return v === null || v === undefined || Number.isNaN(v)
+          ? "—"
+          : v.toFixed(digits);
+      }
 
-function deviceDayNumber(epochSec) {
-  return Math.floor((epochSec + deviceTzOffsetSec) / 86400);
-}
+      function deviceDayNumber(epochSec) {
+        return Math.floor((epochSec + deviceTzOffsetSec) / 86400);
+      }
 
-function deviceDateKey(epochSec) {
-  return new Date(deviceDayNumber(epochSec) * 86400 * 1000).toISOString().slice(0, 10);
-}
+      function deviceDateKey(epochSec) {
+        return new Date(deviceDayNumber(epochSec) * 86400 * 1000)
+          .toISOString()
+          .slice(0, 10);
+      }
 
-function chartWindowStartEpoch() {
-  return (deviceDayNumber(Date.now() / 1000) - (kHistoryDays - 1)) * 86400 - deviceTzOffsetSec;
-}
+      function chartWindowStartEpoch() {
+        return (
+          (deviceDayNumber(Date.now() / 1000) - (kHistoryDays - 1)) * 86400 -
+          deviceTzOffsetSec
+        );
+      }
 
-async function loadHistorySummary() {
-  try {
-    const r = await fetch('/api/history/summary');
-    const s = await r.json();
-    deviceTzOffsetSec = Number(s.local_tz_offset_sec);
-    if (!Number.isFinite(deviceTzOffsetSec)) deviceTzOffsetSec = 0;
-    document.getElementById('statRunsToday').textContent = s.time_synced ? s.runs_today : '—';
-    document.getElementById('statRuntimeToday').textContent = s.time_synced ? fmtDurationSec(s.runtime_today_s) : '—';
-    document.getElementById('statRunsTotal').textContent = s.runs_total;
-    document.getElementById('statLogCount').textContent = `${s.log_count}/${s.log_capacity}`;
-    document.getElementById('historyTimeWarning').style.display = s.time_synced ? 'none' : '';
-  } catch (e) { /* повторится на следующем тике */ }
-}
+      async function loadHistorySummary() {
+        try {
+          const r = await fetch("/api/history/summary");
+          const s = await r.json();
+          deviceTzOffsetSec = Number(s.local_tz_offset_sec);
+          if (!Number.isFinite(deviceTzOffsetSec)) deviceTzOffsetSec = 0;
+          document.getElementById("statRunsToday").textContent = s.time_synced
+            ? s.runs_today
+            : "—";
+          document.getElementById("statRuntimeToday").textContent =
+            s.time_synced ? fmtDurationSec(s.runtime_today_s) : "—";
+          document.getElementById("statRunsTotal").textContent = s.runs_total;
+          document.getElementById("statLogCount").textContent =
+            `${s.log_count}/${s.log_capacity}`;
+          document.getElementById("historyTimeWarning").style.display =
+            s.time_synced ? "none" : "";
+        } catch (e) {
+          /* повторится на следующем тике */
+        }
+      }
 
-// Простая столбчатая диаграмма "запусков в день" за последние 14 дней —
-// без внешних библиотек, инлайновый SVG (как значок вентилятора выше).
-function renderDayChart(records) {
-  const days = [];
-  const counts = {};
-  const today = deviceDayNumber(Date.now() / 1000);
-  for (let i = kHistoryDays - 1; i >= 0; i--) {
-    const key = new Date((today - i) * 86400 * 1000).toISOString().slice(0, 10);
-    days.push({ key, label: key.slice(-2) });
-    counts[key] = 0;
-  }
-  for (const rec of records) {
-    if (!rec.start_epoch) continue;
-    const key = deviceDateKey(rec.start_epoch);
-    if (key in counts) counts[key]++;
-  }
-  const max = Math.max(1, ...Object.values(counts));
-  const width = 320, height = 64, barGap = 2, barW = width / days.length - barGap;
+      // Простая столбчатая диаграмма "запусков в день" за последние 14 дней —
+      // без внешних библиотек, инлайновый SVG (как значок вентилятора выше).
+      function renderDayChart(records) {
+        const days = [];
+        const counts = {};
+        const today = deviceDayNumber(Date.now() / 1000);
+        for (let i = kHistoryDays - 1; i >= 0; i--) {
+          const key = new Date((today - i) * 86400 * 1000)
+            .toISOString()
+            .slice(0, 10);
+          days.push({ key, label: key.slice(-2) });
+          counts[key] = 0;
+        }
+        for (const rec of records) {
+          if (!rec.start_epoch) continue;
+          const key = deviceDateKey(rec.start_epoch);
+          if (key in counts) counts[key]++;
+        }
+        const max = Math.max(1, ...Object.values(counts));
+        const width = 320,
+          height = 64,
+          barGap = 2,
+          barW = width / days.length - barGap;
 
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  svg.setAttribute('width', '100%');
-  svg.setAttribute('height', height);
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+        svg.setAttribute("width", "100%");
+        svg.setAttribute("height", height);
 
-  days.forEach((day, i) => {
-    const c = counts[day.key];
-    const barH = (c / max) * (height - 16);
-    const x = i * (barW + barGap);
-    const rect = document.createElementNS(svgNS, 'rect');
-    rect.setAttribute('x', x);
-    rect.setAttribute('y', height - barH - 14);
-    rect.setAttribute('width', Math.max(1, barW));
-    rect.setAttribute('height', barH);
-    rect.setAttribute('rx', 1);
-    rect.setAttribute('fill', c > 0 ? '#3a7dd6' : '#2a323c');
-    svg.appendChild(rect);
-    if (c > 0) {
-      const countText = document.createElementNS(svgNS, 'text');
-      countText.setAttribute('x', x + barW / 2);
-      countText.setAttribute('y', height - barH - 17);
-      countText.setAttribute('font-size', '8');
-      countText.setAttribute('fill', '#8aa0b8');
-      countText.setAttribute('text-anchor', 'middle');
-      countText.textContent = c;
-      svg.appendChild(countText);
-    }
-    if (i % 2 === 0) {
-      const dayText = document.createElementNS(svgNS, 'text');
-      dayText.setAttribute('x', x + barW / 2);
-      dayText.setAttribute('y', height - 2);
-      dayText.setAttribute('font-size', '8');
-      dayText.setAttribute('fill', '#8aa0b8');
-      dayText.setAttribute('text-anchor', 'middle');
-      dayText.textContent = day.label;
-      svg.appendChild(dayText);
-    }
-  });
+        days.forEach((day, i) => {
+          const c = counts[day.key];
+          const barH = (c / max) * (height - 16);
+          const x = i * (barW + barGap);
+          const rect = document.createElementNS(svgNS, "rect");
+          rect.setAttribute("x", x);
+          rect.setAttribute("y", height - barH - 14);
+          rect.setAttribute("width", Math.max(1, barW));
+          rect.setAttribute("height", barH);
+          rect.setAttribute("rx", 1);
+          rect.setAttribute("fill", c > 0 ? "#3a7dd6" : "#2a323c");
+          svg.appendChild(rect);
+          if (c > 0) {
+            const countText = document.createElementNS(svgNS, "text");
+            countText.setAttribute("x", x + barW / 2);
+            countText.setAttribute("y", height - barH - 17);
+            countText.setAttribute("font-size", "8");
+            countText.setAttribute("fill", "#8aa0b8");
+            countText.setAttribute("text-anchor", "middle");
+            countText.textContent = c;
+            svg.appendChild(countText);
+          }
+          if (i % 2 === 0) {
+            const dayText = document.createElementNS(svgNS, "text");
+            dayText.setAttribute("x", x + barW / 2);
+            dayText.setAttribute("y", height - 2);
+            dayText.setAttribute("font-size", "8");
+            dayText.setAttribute("fill", "#8aa0b8");
+            dayText.setAttribute("text-anchor", "middle");
+            dayText.textContent = day.label;
+            svg.appendChild(dayText);
+          }
+        });
 
-  const container = document.getElementById('historyChart');
-  container.innerHTML = '';
-  container.appendChild(svg);
-}
+        const container = document.getElementById("historyChart");
+        container.innerHTML = "";
+        container.appendChild(svg);
+      }
 
-function renderHistoryRows(records) {
-  const rowsEl = document.getElementById('historyRows');
-  const emptyEl = document.getElementById('historyEmpty');
-  rowsEl.innerHTML = '';
-  if (records.length === 0) {
-    emptyEl.style.display = '';
-    return;
-  }
-  emptyEl.style.display = 'none';
+      function renderHistoryRows(records) {
+        const rowsEl = document.getElementById("historyRows");
+        const emptyEl = document.getElementById("historyEmpty");
+        rowsEl.innerHTML = "";
+        if (records.length === 0) {
+          emptyEl.style.display = "";
+          return;
+        }
+        emptyEl.style.display = "none";
 
-  for (const rec of records.slice(0, 30)) {
-    const row = document.createElement('div');
-    row.className = 'history-row';
-    const reasonLabel = rec.in_progress ? 'Работает сейчас' : (stopReasonText[rec.stop_reason] || rec.stop_reason);
-    const durLabel = rec.in_progress ? 'идёт…' : fmtDurationSec(rec.duration_s);
-    row.innerHTML = `
+        for (const rec of records.slice(0, 30)) {
+          const row = document.createElement("div");
+          row.className = "history-row";
+          const reasonLabel = rec.in_progress
+            ? "Работает сейчас"
+            : stopReasonText[rec.stop_reason] || rec.stop_reason;
+          const durLabel = rec.in_progress
+            ? "идёт…"
+            : fmtDurationSec(rec.duration_s);
+          row.innerHTML = `
       <div class="history-top">
         <span class="history-time">${fmtEpoch(rec.start_epoch)}</span>
         <span class="history-dur">${durLabel}</span>
@@ -470,37 +947,47 @@ function renderHistoryRows(records) {
         <span>Подпол: ${fmtValue(rec.start.crawl_rh)}→${fmtValue(rec.end.crawl_rh)}%  ·  ${fmtValue(rec.start.crawl_temp_c)}→${fmtValue(rec.end.crawl_temp_c)}°C</span>
         <span>Улица: ${fmtValue(rec.start.outside_rh)}→${fmtValue(rec.end.outside_rh)}%  ·  ${fmtValue(rec.start.outside_temp_c)}→${fmtValue(rec.end.outside_temp_c)}°C</span>
       </div>`;
-    rowsEl.appendChild(row);
-  }
-}
+          rowsEl.appendChild(row);
+        }
+      }
 
-async function loadHistory() {
-  try {
-    if (deviceTzOffsetSec === null) await loadHistorySummary();
-    if (deviceTzOffsetSec === null) return;
+      async function loadHistory() {
+        try {
+          if (deviceTzOffsetSec === null) await loadHistorySummary();
+          if (deviceTzOffsetSec === null) return;
 
-    const records = [];
-    const windowStart = chartWindowStartEpoch();
-    let offset = 0;
-    while (true) {
-      const r = await fetch(`/api/history?limit=${kHistoryPageSize}&offset=${offset}`);
-      const page = await r.json();
-      records.push(...page);
-      if (page.length < kHistoryPageSize || page.some(rec => rec.start_epoch && rec.start_epoch < windowStart)) break;
-      offset += page.length;
-    }
-    renderDayChart(records);
-    renderHistoryRows(records);
-  } catch (e) { /* повторится на следующем тике */ }
-}
+          const records = [];
+          const windowStart = chartWindowStartEpoch();
+          let offset = 0;
+          while (true) {
+            const r = await fetch(
+              `/api/history?limit=${kHistoryPageSize}&offset=${offset}`,
+            );
+            const page = await r.json();
+            records.push(...page);
+            if (
+              page.length < kHistoryPageSize ||
+              page.some(
+                (rec) => rec.start_epoch && rec.start_epoch < windowStart,
+              )
+            )
+              break;
+            offset += page.length;
+          }
+          renderDayChart(records);
+          renderHistoryRows(records);
+        } catch (e) {
+          /* повторится на следующем тике */
+        }
+      }
 
-refreshState();
-loadSettings();
-loadPresets();
-loadHistorySummary().then(loadHistory);
-setInterval(refreshState, 3000);
-setInterval(loadHistorySummary, 30000);
-setInterval(loadHistory, 30000);  // журнал меняется редко (минимум раз в MIN_RUNTIME_MS/MIN_PAUSE_MS) — незачем опрашивать чаще
-</script>
-</body>
+      refreshState();
+      loadSettings();
+      loadPresets();
+      loadHistorySummary().then(loadHistory);
+      setInterval(refreshState, 3000);
+      setInterval(loadHistorySummary, 30000);
+      setInterval(loadHistory, 30000); // журнал меняется редко (минимум раз в MIN_RUNTIME_MS/MIN_PAUSE_MS) — незачем опрашивать чаще
+    </script>
+  </body>
 </html>
