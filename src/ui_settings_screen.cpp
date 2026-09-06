@@ -147,9 +147,9 @@ void buildRow(lv_obj_t* parent, RowIndex idx, const char* labelText, int32_t ran
     g_rows[idx].oneDecimal = oneDecimal;
 
     void* userData = reinterpret_cast<void*>(static_cast<intptr_t>(idx));
-    lv_obj_add_event_cb(minusBtn, onDecrementClicked, LV_EVENT_CLICKED, userData);
+    lv_obj_add_event_cb(minusBtn, onDecrementClicked, LV_EVENT_SHORT_CLICKED, userData);
     lv_obj_add_event_cb(minusBtn, onDecrementClicked, LV_EVENT_LONG_PRESSED_REPEAT, userData);
-    lv_obj_add_event_cb(plusBtn, onIncrementClicked, LV_EVENT_CLICKED, userData);
+    lv_obj_add_event_cb(plusBtn, onIncrementClicked, LV_EVENT_SHORT_CLICKED, userData);
     lv_obj_add_event_cb(plusBtn, onIncrementClicked, LV_EVENT_LONG_PRESSED_REPEAT, userData);
 }
 
