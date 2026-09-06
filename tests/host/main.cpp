@@ -5,6 +5,7 @@
 // Exercise the actual controller and widgets; only hardware/storage are stubbed.
 #include "relay.cpp"
 #include "ui_dashboard.cpp"
+#include "ui_settings_screen.cpp"
 
 SystemState testState;
 RuntimeSettings testSaved;
@@ -111,13 +112,50 @@ int main() {
               "mode button fits visible row");
     }
     healthyReadings();
+    testState.settings.mode = OperatingMode::Auto;
     for (OperatingMode mode : {OperatingMode::ManualOn, OperatingMode::ManualOff, OperatingMode::Auto}) {
-        lv_obj_send_event(g_modeButtons[static_cast<size_t>(mode)], LV_EVENT_CLICKED, nullptr);
+        static lv_point_t touchPoint;
+        static bool touchPressed = false;
+        static lv_indev_t* touch = lv_indev_create();
+        lv_indev_set_type(touch, LV_INDEV_TYPE_POINTER);
+        lv_indev_set_display(touch, display);
+        lv_indev_set_read_cb(touch, [](lv_indev_t*, lv_indev_data_t* data) {
+            data->point = touchPoint;
+            data->state = touchPressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+        });
+        lv_obj_update_layout(parent);
+        lv_area_t area;
+        lv_obj_get_coords(g_modeButtons[static_cast<size_t>(mode)], &area);
+        touchPoint = {(area.x1 + area.x2) / 2, (area.y1 + area.y2) / 2};
+        touchPressed = true; lv_indev_read(touch);
+        touchPressed = false; lv_indev_read(touch);
         check(testState.settings.mode == mode && testSaved.mode == mode, "button updates and saves selected mode");
         evaluate(); UiDashboard::update();
         if (mode == OperatingMode::ManualOn) check(testRelayLevel == HIGH, "ON button reaches relay");
         if (mode == OperatingMode::ManualOff) check(testRelayLevel == LOW, "OFF button reaches relay");
     }
+    testState.relay.state = RelayControlState::LockedOutSensorFault;
+    testState.relay.relayOn = false;
+    UiDashboard::update();
+    check(std::strcmp(lv_label_get_text(g_bannerLabel), "ВЫКЛ: ошибка датчиков") == 0,
+          "dashboard explains blocked start");
+    lv_obj_clean(parent);
+    UiSettingsScreen::build(parent);
+    lv_obj_update_layout(parent);
+    auto* footer = lv_obj_get_child(parent, -1);
+    auto* save = lv_obj_get_child(footer, 0);
+    lv_area_t footerArea, saveArea;
+    lv_obj_get_coords(footer, &footerArea); lv_obj_get_coords(save, &saveArea);
+    check(saveArea.y1 >= footerArea.y1 && saveArea.y2 <= footerArea.y2,
+          "settings save button fits footer");
+    const int32_t initialTarget = g_rows[kRhTarget].value;
+    auto* targetRow = lv_obj_get_child(parent, 1);
+    lv_obj_send_event(lv_obj_get_child(targetRow, 3), LV_EVENT_SHORT_CLICKED, nullptr);
+    check(g_rows[kRhTarget].value == initialTarget + 1, "settings plus changes value");
+    lv_obj_send_event(save, LV_EVENT_CLICKED, nullptr);
+    check(testSaved.rhTargetPercent == initialTarget + 1, "settings save persists edited value");
+    lv_obj_send_event(lv_obj_get_child(targetRow, 1), LV_EVENT_SHORT_CLICKED, nullptr);
+    check(g_rows[kRhTarget].value == initialTarget, "settings minus changes value");
     lv_display_delete(display);
     std::cout << "All firmware checks passed\n";
 }

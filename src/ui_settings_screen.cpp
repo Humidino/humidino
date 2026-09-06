@@ -96,6 +96,7 @@ void onDecrementClicked(lv_event_t* e) {
 lv_obj_t* buildStepButtonLabel(lv_obj_t* parent, const char* text) {
     lv_obj_t* btn = lv_button_create(parent);
     lv_obj_set_size(btn, 40, 34);
+    lv_obj_set_style_pad_ver(btn, 0, 0);
 
     lv_obj_t* lbl = lv_label_create(btn);
     lv_obj_set_style_text_font(lbl, &font_ru_14, 0);
@@ -227,7 +228,9 @@ void build(lv_obj_t* parent) {
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(footer, 12, 0);
+    lv_obj_set_style_pad_ver(footer, 2, 0);
     lv_obj_set_style_border_width(footer, 0, 0);
+    lv_obj_clear_flag(footer, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t* saveBtn = lv_button_create(footer);
     lv_obj_add_event_cb(saveBtn, onSaveClicked, LV_EVENT_CLICKED, nullptr);

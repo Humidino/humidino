@@ -232,7 +232,9 @@ void build(lv_obj_t* parent) {
     lv_obj_set_size(nameFooter, LV_PCT(100), 44);
     lv_obj_set_flex_flow(nameFooter, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_gap(nameFooter, 12, 0);
+    lv_obj_set_style_pad_ver(nameFooter, 2, 0);
     lv_obj_set_style_border_width(nameFooter, 0, 0);
+    lv_obj_clear_flag(nameFooter, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t* saveBtn = lv_button_create(nameFooter);
     lv_obj_add_event_cb(saveBtn, onNameSaveClicked, LV_EVENT_CLICKED, nullptr);

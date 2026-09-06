@@ -60,6 +60,7 @@ lv_obj_t* buildNavButton(lv_obj_t* parent, const char* text, int idx) {
     lv_obj_t* btn = lv_button_create(parent);
     lv_obj_set_flex_grow(btn, 1);
     lv_obj_set_height(btn, LV_PCT(100));
+    lv_obj_set_style_pad_ver(btn, 0, 0);
     lv_obj_add_event_cb(btn, onNavClicked, LV_EVENT_CLICKED,
                          reinterpret_cast<void*>(static_cast<uintptr_t>(idx)));
 
