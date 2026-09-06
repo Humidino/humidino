@@ -16,6 +16,9 @@ namespace {
 
 constexpr uint16_t kScreenWidth = 480;
 constexpr uint16_t kScreenHeight = 320;
+// NVS хранит калибровку для прежней ориентации 1. Поворот на 180°
+// меняет только флаги инверсии X/Y в пятом слове TFT_eSPI.
+constexpr uint16_t kTouchInvertBothAxes = 0x06;
 constexpr uint32_t kDrawBufLines = 40;  // 480*40*2 байта = ~38 КБ на буфер — мелочь для 8 МБ PSRAM
 
 TFT_eSPI g_tft;
@@ -33,6 +36,7 @@ uint32_t lvTickGetCb() { return millis(); }
 void setupTouch() {
     uint16_t calData[Settings::kTouchCalibrationValues];
     if (Settings::loadTouchCalibration(calData)) {
+        calData[4] ^= kTouchInvertBothAxes;
         g_tft.setTouch(calData);
         return;
     }
@@ -51,6 +55,9 @@ void setupTouch() {
 
     Watchdog::registerCurrentTask();
 
+    // calibrateTouch уже применил новую ориентацию в RAM; в NVS сохраняем
+    // прежний формат, чтобы при каждой загрузке поворот применялся один раз.
+    calData[4] ^= kTouchInvertBothAxes;
     Settings::saveTouchCalibration(calData);
 }
 
@@ -115,7 +122,7 @@ void lvglTask(void*) {
 
     g_tft.init();
     g_tft.setSwapBytes(true);
-    g_tft.setRotation(1);  // альбомная ориентация; подправить на стенде, если панель выйдет зеркальной/повёрнутой
+    g_tft.setRotation(3);  // альбомная ориентация, развёрнутая на 180°
     g_tft.fillScreen(TFT_BLACK);
 
     // Подсветку нужно включить ДО калибровки тача — иначе экран может
