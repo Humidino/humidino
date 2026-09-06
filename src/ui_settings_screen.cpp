@@ -137,6 +137,7 @@ void buildRow(lv_obj_t* parent, RowIndex idx, const char* labelText, int32_t ran
 
     lv_obj_t* valueLbl = lv_label_create(valueBox);
     lv_obj_set_style_text_font(valueLbl, &font_ru_14, 0);
+    lv_obj_set_style_text_color(valueLbl, lv_color_hex(0xF0F0F0), 0);
     lv_obj_center(valueLbl);
 
     g_rows[idx].valueLabel = valueLbl;
