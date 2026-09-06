@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <cmath>
+#include <cstdlib>
 
 #include "fonts/fonts.h"
 #include "season.h"
@@ -11,7 +12,7 @@
 namespace {
 
 // Индексы совпадают с порядком создания строк в build() — используется
-// только внутри этого файла для чтения/записи спинбоксов при сохранении.
+// только внутри этого файла для чтения/записи значений при сохранении.
 enum RowIndex {
     kRhTarget = 0,
     kHysteresis,
@@ -21,7 +22,23 @@ enum RowIndex {
     kRowCount
 };
 
-lv_obj_t* g_spinboxes[kRowCount];
+// x10 фиксированная точка только у температуры (там нужен шаг 0.5 °C из-за
+// сезонных профилей, см. season.cpp); влажность/гистерезис/минуты — целые.
+constexpr int32_t kDecimalScale = 10;
+
+// Ручной счётчик вместо lv_spinbox: у спинбокса фиксированная ширина в
+// цифрах и он всегда дополняет число ведущими нулями (007.5, 005 и т.п.),
+// что нечитаемо для обычного пользователя — здесь просто печатаем значение.
+struct CounterRow {
+    lv_obj_t* valueLabel = nullptr;
+    int32_t value = 0;
+    int32_t rangeMin = 0;
+    int32_t rangeMax = 0;
+    int32_t step = 1;
+    bool oneDecimal = false;  // true только для kFreezeC (x10 фиксированная точка)
+};
+
+CounterRow g_rows[kRowCount];
 lv_obj_t* g_seasonAutoSwitch;
 lv_obj_t* g_seasonNowLabel;
 lv_obj_t* g_savedFlash;
@@ -37,10 +54,6 @@ const char* seasonRuName(Season::Id season) {
     return "?";
 }
 
-// x10 фиксированная точка на десятичных полях (влажность/гистерезис/°C);
-// минуты — целые.
-constexpr int32_t kDecimalScale = 10;
-
 void hideFlash(lv_timer_t*) {
     lv_obj_add_flag(g_savedFlash, LV_OBJ_FLAG_HIDDEN);
     g_flashTimer = nullptr;
@@ -53,12 +66,31 @@ void showSavedFlash() {
     lv_timer_set_repeat_count(g_flashTimer, 1);
 }
 
+void updateRowLabel(RowIndex idx) {
+    CounterRow& row = g_rows[idx];
+    char buf[16];
+    if (row.oneDecimal) {
+        bool neg = row.value < 0;
+        int32_t absVal = std::abs(row.value);
+        snprintf(buf, sizeof(buf), "%s%d.%d", neg ? "-" : "", absVal / 10, absVal % 10);
+    } else {
+        snprintf(buf, sizeof(buf), "%d", static_cast<int>(row.value));
+    }
+    lv_label_set_text(row.valueLabel, buf);
+}
+
 void onIncrementClicked(lv_event_t* e) {
-    lv_spinbox_increment(static_cast<lv_obj_t*>(lv_event_get_user_data(e)));
+    RowIndex idx = static_cast<RowIndex>(reinterpret_cast<intptr_t>(lv_event_get_user_data(e)));
+    CounterRow& row = g_rows[idx];
+    row.value = LV_MIN(row.value + row.step, row.rangeMax);
+    updateRowLabel(idx);
 }
 
 void onDecrementClicked(lv_event_t* e) {
-    lv_spinbox_decrement(static_cast<lv_obj_t*>(lv_event_get_user_data(e)));
+    RowIndex idx = static_cast<RowIndex>(reinterpret_cast<intptr_t>(lv_event_get_user_data(e)));
+    CounterRow& row = g_rows[idx];
+    row.value = LV_MAX(row.value - row.step, row.rangeMin);
+    updateRowLabel(idx);
 }
 
 lv_obj_t* buildStepButtonLabel(lv_obj_t* parent, const char* text) {
@@ -72,14 +104,10 @@ lv_obj_t* buildStepButtonLabel(lv_obj_t* parent, const char* text) {
     return btn;
 }
 
-// Строка "подпись | [-] [спинбокс] [+]". Возвращает сам спинбокс — только
-// его значение читается/пишется при сохранении/обновлении экрана.
-//
-// Кнопки "-"/"+" создаются раньше спинбокса (чтобы он лёг между ними по
-// порядку в DOM), а обработчики на них вешаются уже после того, как
-// спинбокс существует — иначе им не на что было бы указывать.
-lv_obj_t* buildRow(lv_obj_t* parent, const char* labelText, uint32_t digitCount, uint32_t sepPos,
-                    int32_t rangeMin, int32_t rangeMax, int32_t step) {
+// Строка "подпись | [-] [значение] [+]". Значение и его границы хранятся в
+// g_rows[idx] — читаются/пишутся при сохранении и обновлении экрана.
+void buildRow(lv_obj_t* parent, RowIndex idx, const char* labelText, int32_t rangeMin,
+              int32_t rangeMax, int32_t step, bool oneDecimal) {
     lv_obj_t* row = lv_obj_create(parent);
     lv_obj_set_size(row, LV_PCT(100), 40);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
@@ -96,43 +124,49 @@ lv_obj_t* buildRow(lv_obj_t* parent, const char* labelText, uint32_t digitCount,
     lv_obj_t* plusBtn = buildStepButtonLabel(row, "+");
 
     // Создан последним -> сейчас после [lbl, minus, plus] (индекс 3).
-    // Переносим на индекс 2, чтобы лёг между "-" и "+": [lbl, minus, sb, plus].
-    lv_obj_t* sb = lv_spinbox_create(row);
-    lv_obj_move_to_index(sb, 2);
-    lv_obj_set_width(sb, 84);
-    lv_obj_set_style_text_font(sb, &font_ru_14, 0);
-    lv_spinbox_set_digit_format(sb, digitCount, sepPos);
-    lv_spinbox_set_range(sb, rangeMin, rangeMax);
-    lv_spinbox_set_step(sb, step);
+    // Переносим на индекс 2, чтобы лёг между "-" и "+": [lbl, minus, box, plus].
+    lv_obj_t* valueBox = lv_obj_create(row);
+    lv_obj_move_to_index(valueBox, 2);
+    lv_obj_set_size(valueBox, 84, 34);
+    lv_obj_set_style_bg_color(valueBox, lv_color_hex(0x1C232B), 0);
+    lv_obj_set_style_border_color(valueBox, lv_color_hex(0x33404D), 0);
+    lv_obj_set_style_border_width(valueBox, 1, 0);
+    lv_obj_set_style_radius(valueBox, 4, 0);
+    lv_obj_set_style_pad_all(valueBox, 0, 0);
+    lv_obj_clear_flag(valueBox, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_add_event_cb(minusBtn, onDecrementClicked, LV_EVENT_CLICKED, sb);
-    lv_obj_add_event_cb(minusBtn, onDecrementClicked, LV_EVENT_LONG_PRESSED_REPEAT, sb);
-    lv_obj_add_event_cb(plusBtn, onIncrementClicked, LV_EVENT_CLICKED, sb);
-    lv_obj_add_event_cb(plusBtn, onIncrementClicked, LV_EVENT_LONG_PRESSED_REPEAT, sb);
+    lv_obj_t* valueLbl = lv_label_create(valueBox);
+    lv_obj_set_style_text_font(valueLbl, &font_ru_14, 0);
+    lv_obj_center(valueLbl);
 
-    return sb;
+    g_rows[idx].valueLabel = valueLbl;
+    g_rows[idx].rangeMin = rangeMin;
+    g_rows[idx].rangeMax = rangeMax;
+    g_rows[idx].step = step;
+    g_rows[idx].oneDecimal = oneDecimal;
+
+    void* userData = reinterpret_cast<void*>(static_cast<intptr_t>(idx));
+    lv_obj_add_event_cb(minusBtn, onDecrementClicked, LV_EVENT_SHORT_CLICKED, userData);
+    lv_obj_add_event_cb(minusBtn, onDecrementClicked, LV_EVENT_LONG_PRESSED_REPEAT, userData);
+    lv_obj_add_event_cb(plusBtn, onIncrementClicked, LV_EVENT_SHORT_CLICKED, userData);
+    lv_obj_add_event_cb(plusBtn, onIncrementClicked, LV_EVENT_LONG_PRESSED_REPEAT, userData);
 }
 
 void onSaveClicked(lv_event_t*) {
     RuntimeSettings previous = ShaState::getSettings();  // сохраняем текущий mode как есть
     RuntimeSettings settings = previous;
-    settings.rhTargetPercent =
-        static_cast<float>(lv_spinbox_get_value(g_spinboxes[kRhTarget])) / kDecimalScale;
-    settings.hysteresisPercent =
-        static_cast<float>(lv_spinbox_get_value(g_spinboxes[kHysteresis])) / kDecimalScale;
-    settings.freezeProtectC =
-        static_cast<float>(lv_spinbox_get_value(g_spinboxes[kFreezeC])) / kDecimalScale;
-    settings.minRuntimeMs =
-        static_cast<uint32_t>(lv_spinbox_get_value(g_spinboxes[kMinRuntimeMin])) * 60000UL;
-    settings.minPauseMs =
-        static_cast<uint32_t>(lv_spinbox_get_value(g_spinboxes[kMinPauseMin])) * 60000UL;
+    settings.rhTargetPercent = static_cast<float>(g_rows[kRhTarget].value);
+    settings.hysteresisPercent = static_cast<float>(g_rows[kHysteresis].value);
+    settings.freezeProtectC = static_cast<float>(g_rows[kFreezeC].value) / kDecimalScale;
+    settings.minRuntimeMs = static_cast<uint32_t>(g_rows[kMinRuntimeMin].value) * 60000UL;
+    settings.minPauseMs = static_cast<uint32_t>(g_rows[kMinPauseMin].value) * 60000UL;
     settings.seasonAutoEnabled = lv_obj_has_state(g_seasonAutoSwitch, LV_STATE_CHECKED);
 
     // Включили автосезон этим же сохранением — подставляем профиль текущего
     // сезона сразу (см. SettingsActions::withSeasonSyncOnEnable), иначе поля
     // выше и останутся тем, что было введено вручную, пока сезон не сменится.
     SettingsActions::applyRuntimeSettings(SettingsActions::withSeasonSyncOnEnable(previous, settings));
-    UiSettingsScreen::refresh();  // если автосезон подставил свои цифры — тут же показать их на спинбоксах
+    UiSettingsScreen::refresh();  // если автосезон подставил свои цифры — тут же показать их
     showSavedFlash();
 }
 
@@ -148,17 +182,21 @@ void build(lv_obj_t* parent) {
 
     lv_obj_t* title = lv_label_create(parent);
     lv_obj_set_style_text_font(title, &font_ru_20, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xF0F0F0), 0);
+    lv_obj_set_width(title, LV_PCT(100));
+    lv_label_set_long_mode(title, LV_LABEL_LONG_WRAP);
     lv_label_set_text(title, "Пороги и тайминги осушения");
 
-    // Влажность 0.0-100.0 %, шаг 0.5 %
-    g_spinboxes[kRhTarget] = buildRow(parent, "Целевая влажность подпола, %", 4, 3, 0, 1000, 5);
-    // Гистерезис 0.0-50.0 %, шаг 0.5 %
-    g_spinboxes[kHysteresis] = buildRow(parent, "Гистерезис, %", 4, 3, 0, 500, 5);
-    // Защита от замерзания -20.0..40.0 °C, шаг 0.5 °C
-    g_spinboxes[kFreezeC] = buildRow(parent, "Защита от замерзания, °C", 4, 3, -200, 400, 5);
+    // Влажность 0-100 %, шаг 1 %
+    buildRow(parent, kRhTarget, "Целевая влажность подпола, %", 0, 100, 1, false);
+    // Гистерезис 0-50 %, шаг 1 %
+    buildRow(parent, kHysteresis, "Гистерезис, %", 0, 50, 1, false);
+    // Защита от замерзания -20.0..40.0 °C, шаг 0.5 °C (сезонные профили
+    // используют половинки градуса — см. season.cpp)
+    buildRow(parent, kFreezeC, "Защита от замерзания, °C", -200, 400, 5, true);
     // Мин. время работы/паузы, целые минуты 0-180
-    g_spinboxes[kMinRuntimeMin] = buildRow(parent, "Мин. время работы, мин", 3, 0, 0, 180, 1);
-    g_spinboxes[kMinPauseMin] = buildRow(parent, "Мин. пауза, мин", 3, 0, 0, 180, 1);
+    buildRow(parent, kMinRuntimeMin, "Мин. время работы, мин", 0, 180, 1, false);
+    buildRow(parent, kMinPauseMin, "Мин. пауза, мин", 0, 180, 1, false);
 
     // --- Автосезон: подставляет пороги/тайминги выше сама, по календарю ---
     // (профили под климат Лотошино, МО — см. docs/SEASONAL_LOTOSHINO.md).
@@ -208,16 +246,12 @@ void build(lv_obj_t* parent) {
 
 void refresh() {
     RuntimeSettings settings = ShaState::getSettings();
-    lv_spinbox_set_value(g_spinboxes[kRhTarget],
-                          static_cast<int32_t>(lroundf(settings.rhTargetPercent * kDecimalScale)));
-    lv_spinbox_set_value(g_spinboxes[kHysteresis],
-                          static_cast<int32_t>(lroundf(settings.hysteresisPercent * kDecimalScale)));
-    lv_spinbox_set_value(g_spinboxes[kFreezeC],
-                          static_cast<int32_t>(lroundf(settings.freezeProtectC * kDecimalScale)));
-    lv_spinbox_set_value(g_spinboxes[kMinRuntimeMin],
-                          static_cast<int32_t>(settings.minRuntimeMs / 60000UL));
-    lv_spinbox_set_value(g_spinboxes[kMinPauseMin],
-                          static_cast<int32_t>(settings.minPauseMs / 60000UL));
+    g_rows[kRhTarget].value = static_cast<int32_t>(lroundf(settings.rhTargetPercent));
+    g_rows[kHysteresis].value = static_cast<int32_t>(lroundf(settings.hysteresisPercent));
+    g_rows[kFreezeC].value = static_cast<int32_t>(lroundf(settings.freezeProtectC * kDecimalScale));
+    g_rows[kMinRuntimeMin].value = static_cast<int32_t>(settings.minRuntimeMs / 60000UL);
+    g_rows[kMinPauseMin].value = static_cast<int32_t>(settings.minPauseMs / 60000UL);
+    for (int i = 0; i < kRowCount; ++i) updateRowLabel(static_cast<RowIndex>(i));
 
     if (settings.seasonAutoEnabled) lv_obj_add_state(g_seasonAutoSwitch, LV_STATE_CHECKED);
     else lv_obj_remove_state(g_seasonAutoSwitch, LV_STATE_CHECKED);
