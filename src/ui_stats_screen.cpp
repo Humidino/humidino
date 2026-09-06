@@ -121,6 +121,7 @@ void buildRow(size_t index) {
     formatClock(buf, sizeof(buf), r.startEpoch);
     lv_obj_t* timeLbl = lv_label_create(topRow);
     lv_obj_set_style_text_font(timeLbl, &font_ru_14, 0);
+    lv_obj_set_style_text_color(timeLbl, lv_color_hex(0xF0F0F0), 0);
     lv_label_set_text(timeLbl, buf);
 
     if (inProgress) {
@@ -132,6 +133,7 @@ void buildRow(size_t index) {
         formatDuration(buf, sizeof(buf), r.durationMs);
         lv_obj_t* durLbl = lv_label_create(topRow);
         lv_obj_set_style_text_font(durLbl, &font_ru_14, 0);
+        lv_obj_set_style_text_color(durLbl, lv_color_hex(0xF0F0F0), 0);
         lv_label_set_text(durLbl, buf);
 
         lv_obj_t* reasonLbl = lv_label_create(topRow);
@@ -177,10 +179,12 @@ void build(lv_obj_t* parent) {
 
     lv_obj_t* title = lv_label_create(parent);
     lv_obj_set_style_text_font(title, &font_ru_20, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xF0F0F0), 0);
     lv_label_set_text(title, "Статистика");
 
     g_summaryLabel = lv_label_create(parent);
     lv_obj_set_style_text_font(g_summaryLabel, &font_ru_14, 0);
+    lv_obj_set_style_text_color(g_summaryLabel, lv_color_hex(0xF0F0F0), 0);
     lv_label_set_text(g_summaryLabel, "--");
 
     g_totalLabel = lv_label_create(parent);
@@ -198,6 +202,7 @@ void build(lv_obj_t* parent) {
 
     g_emptyLabel = lv_label_create(parent);
     lv_obj_set_style_text_font(g_emptyLabel, &font_ru_14, 0);
+    lv_obj_set_style_text_color(g_emptyLabel, lv_color_hex(0xF0F0F0), 0);
     lv_label_set_text(g_emptyLabel, "Пока нет ни одного запуска");
     lv_obj_add_flag(g_emptyLabel, LV_OBJ_FLAG_HIDDEN);
 
