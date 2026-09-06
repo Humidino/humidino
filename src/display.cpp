@@ -65,6 +65,7 @@ void touchReadCb(lv_indev_t*, lv_indev_data_t* data) {
         // во время работы с тач-интерфейсом. Любое касание тоже должно
         // считаться активностью.
         Backlight::noteActivity();
+        Backlight::update(millis());  // зажечь до возможной долгой перерисовки
     } else {
         data->state = LV_INDEV_STATE_RELEASED;
     }
@@ -147,9 +148,8 @@ void lvglTask(void*) {
     Backlight::setLevel(BACKLIGHT_FULL_PCT);
 
     for (;;) {
-        uint32_t now = millis();
         lv_timer_handler();
-        Backlight::update(now);
+        Backlight::update(millis());
         Watchdog::feed();
         vTaskDelay(pdMS_TO_TICKS(10));
     }

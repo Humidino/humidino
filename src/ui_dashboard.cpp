@@ -1,6 +1,7 @@
 #include "ui_dashboard.h"
 
 #include <Arduino.h>
+#include <cstring>
 #include <esp_heap_caps.h>
 #include <lvgl.h>
 
@@ -12,6 +13,12 @@
 #include "shared_state.h"
 
 namespace {
+
+// LVGL выделяет память и инвалидирует текст даже при повторе той же строки.
+// На SPI-дисплее не перерисовываем неизменившиеся показания каждые 500 мс.
+void setLabelTextIfChanged(lv_obj_t* label, const char* text) {
+    if (std::strcmp(lv_label_get_text(label), text) != 0) lv_label_set_text(label, text);
+}
 
 // Смайлик-индикатор комфорта — нарисован примитивами LVGL (круг + глаза +
 // дуга-рот), а не символом Unicode: шрифты font_ru_* сгенерированы под узкий
@@ -58,6 +65,7 @@ void setMode(OperatingMode mode) {
     if (settings.mode == mode) return;
     settings.mode = mode;
     SettingsActions::applyRuntimeSettings(settings);
+    UiDashboard::update();
 }
 
 void onModeAutoClicked(lv_event_t*) { setMode(OperatingMode::Auto); }
@@ -67,11 +75,14 @@ void onModeOffClicked(lv_event_t*) { setMode(OperatingMode::ManualOff); }
 lv_obj_t* buildModeButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb) {
     lv_obj_t* btn = lv_button_create(parent);
     lv_obj_set_flex_grow(btn, 1);
+    lv_obj_set_height(btn, LV_PCT(100));
+    lv_obj_set_style_pad_ver(btn, 0, 0);
     lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, nullptr);
 
     lv_obj_t* label = lv_label_create(btn);
     lv_obj_set_style_text_font(label, &font_ru_14, 0);
-    lv_label_set_text(label, text);
+    lv_obj_set_style_text_color(label, lv_color_hex(0xF0F0F0), 0);
+    setLabelTextIfChanged(label, text);
     lv_obj_center(label);
 
     return btn;
@@ -219,7 +230,7 @@ ZonePanelWidgets buildZoneRow(lv_obj_t* parent, const char* title, bool hasDew, 
 
     lv_obj_t* titleLabel = lv_label_create(row);
     lv_obj_set_style_text_font(titleLabel, &font_ru_14, 0);
-    lv_label_set_text(titleLabel, title);
+    setLabelTextIfChanged(titleLabel, title);
     lv_obj_set_width(titleLabel, LV_PCT(22));
     lv_label_set_long_mode(titleLabel, LV_LABEL_LONG_DOT);
 
@@ -233,13 +244,13 @@ ZonePanelWidgets buildZoneRow(lv_obj_t* parent, const char* title, bool hasDew, 
     // переноса здесь именно ширина, а не сам long_mode.
     w.value = lv_label_create(row);
     lv_obj_set_style_text_font(w.value, &font_ru_20, 0);
-    lv_label_set_text(w.value, "Нет данных");
+    setLabelTextIfChanged(w.value, "Нет данных");
     lv_obj_set_width(w.value, LV_PCT(38));
     lv_label_set_long_mode(w.value, LV_LABEL_LONG_DOT);
 
     w.dew = lv_label_create(row);
     lv_obj_set_style_text_font(w.dew, &font_ru_14, 0);
-    lv_label_set_text(w.dew, "");
+    setLabelTextIfChanged(w.dew, "");
     lv_obj_set_width(w.dew, LV_PCT(24));
     lv_label_set_long_mode(w.dew, LV_LABEL_LONG_DOT);
     w.hasDew = hasDew;
@@ -258,7 +269,7 @@ ZonePanelWidgets buildZoneRow(lv_obj_t* parent, const char* title, bool hasDew, 
     w.errBadge = lv_label_create(row);
     lv_obj_set_style_text_font(w.errBadge, &font_ru_14, 0);
     lv_obj_set_style_text_color(w.errBadge, lv_color_hex(0xE04040), 0);
-    lv_label_set_text(w.errBadge, "");
+    setLabelTextIfChanged(w.errBadge, "");
     lv_obj_set_flex_grow(w.errBadge, 1);
     lv_obj_set_style_text_align(w.errBadge, LV_TEXT_ALIGN_RIGHT, 0);
 
@@ -280,21 +291,21 @@ void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r, const Ru
 
     if (r.valid) {
         snprintf(buf, sizeof(buf), "%.1f °C %.1f%%", r.temperatureC, r.humidityPct);
-        lv_label_set_text(w.value, buf);
+        setLabelTextIfChanged(w.value, buf);
 
         if (w.hasDew) {
             snprintf(buf, sizeof(buf), "т.р. %.1f °C", r.dewPointC);
-            lv_label_set_text(w.dew, buf);
+            setLabelTextIfChanged(w.dew, buf);
         }
     } else {
         // Единая явная надпись вместо прочерков — иначе строка отключённого
         // датчика выглядит как визуально пустая, а не как сообщение об
         // отсутствии данных.
-        lv_label_set_text(w.value, "Нет данных");
-        if (w.hasDew) lv_label_set_text(w.dew, "");
+        setLabelTextIfChanged(w.value, "Нет данных");
+        if (w.hasDew) setLabelTextIfChanged(w.dew, "");
     }
 
-    lv_label_set_text(w.errBadge, r.error ? "ERR" : "");
+    setLabelTextIfChanged(w.errBadge, r.error ? "ERR" : "");
 
     if (w.hasFace) {
         // Пока нет валидных данных (первые секунды после старта) или датчик
@@ -319,10 +330,17 @@ void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r, const Ru
     }
 }
 
-// Баннер намеренно не показывает причину простоя (мороз/конденсат/сбой
-// датчика) — только сам факт, крутится вентилятор сейчас или нет. Причину
-// при необходимости видно в веб-интерфейсе (toString(RelayControlState) в
-// JSON-API), а главный экран платы держим простым и однозначным.
+const char* bannerTextFor(const RelayStatus& status) {
+    if (status.relayOn) return "ВЕНТИЛЯТОР: ВКЛ";
+    switch (status.state) {
+        case RelayControlState::LockedOutSensorFault: return "ВЫКЛ: ошибка датчиков";
+        case RelayControlState::LockedOutFreeze: return "ВЫКЛ: защита от холода";
+        case RelayControlState::LockedOutCondensation: return "ВЫКЛ: риск конденсата";
+        case RelayControlState::MinPauseHold: return "ВЫКЛ: минимальная пауза";
+        default: return "ВЕНТИЛЯТОР: ВЫКЛ";
+    }
+}
+
 lv_color_t bannerColorFor(bool relayOn) {
     return relayOn ? lv_color_hex(0x2E8B45)    // зелёный
                    : lv_color_hex(0x3A4A5A);   // серо-синий
@@ -354,30 +372,31 @@ void build(lv_obj_t* parent) {
     // --- Строка статуса ---
     lv_obj_t* statusBar = lv_obj_create(scr);
     lv_obj_set_size(statusBar, LV_PCT(100), 28);
+    lv_obj_set_style_pad_all(statusBar, 2, 0);
     lv_obj_set_flex_flow(statusBar, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(statusBar, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     g_uptimeLabel = lv_label_create(statusBar);
     lv_obj_set_style_text_font(g_uptimeLabel, &font_ru_14, 0);
-    lv_label_set_text(g_uptimeLabel, "Время работы: --");
+    setLabelTextIfChanged(g_uptimeLabel, "Время работы: --");
 
     g_wifiLabel = lv_label_create(statusBar);
     lv_obj_set_style_text_font(g_wifiLabel, &font_ru_14, 0);
-    lv_label_set_text(g_wifiLabel, "WiFi: --");
+    setLabelTextIfChanged(g_wifiLabel, "WiFi: --");
 
     g_ramLabel = lv_label_create(statusBar);
     lv_obj_set_style_text_font(g_ramLabel, &font_ru_14, 0);
-    lv_label_set_text(g_ramLabel, "ОЗУ: --");
+    setLabelTextIfChanged(g_ramLabel, "ОЗУ: --");
 
     g_modeLabel = lv_label_create(statusBar);
     lv_obj_set_style_text_font(g_modeLabel, &font_ru_14, 0);
     lv_obj_set_style_text_color(g_modeLabel, lv_color_hex(0x8AA0B8), 0);
-    lv_label_set_text(g_modeLabel, "АВТО");
+    setLabelTextIfChanged(g_modeLabel, "АВТО");
 
     g_seasonLabel = lv_label_create(statusBar);
     lv_obj_set_style_text_font(g_seasonLabel, &font_ru_14, 0);
     lv_obj_set_style_text_color(g_seasonLabel, lv_color_hex(0x8AA0B8), 0);
-    lv_label_set_text(g_seasonLabel, "");
+    setLabelTextIfChanged(g_seasonLabel, "");
 
     // --- Кнопки переключения режима (дублируют веб-интерфейс) ---
     lv_obj_t* modeRow = lv_obj_create(scr);
@@ -386,6 +405,9 @@ void build(lv_obj_t* parent) {
     lv_obj_set_style_pad_gap(modeRow, 4, 0);
     lv_obj_set_style_pad_all(modeRow, 0, 0);
     lv_obj_set_style_border_width(modeRow, 0, 0);
+    // Кнопки целиком помещаются в строке; движение пальца не должно
+    // превращать нажатие в прокрутку этого контейнера.
+    lv_obj_clear_flag(modeRow, LV_OBJ_FLAG_SCROLLABLE);
 
     g_modeButtons[static_cast<size_t>(OperatingMode::Auto)] =
         buildModeButton(modeRow, "АВТО", onModeAutoClicked);
@@ -413,6 +435,8 @@ void build(lv_obj_t* parent) {
     // --- Баннер статуса: ВКЛ/ВЫКЛ сверху, счётчик запусков снизу ---
     g_banner = lv_obj_create(scr);
     lv_obj_set_size(g_banner, LV_PCT(100), 64);
+    lv_obj_set_style_pad_all(g_banner, 4, 0);
+    lv_obj_clear_flag(g_banner, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(g_banner, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(g_banner, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(g_banner, 2, 0);
@@ -442,12 +466,12 @@ void build(lv_obj_t* parent) {
     // bannerColorFor()) он становится почти нечитаемым. Задаём светлый цвет
     // явно, а не полагаемся на тему.
     lv_obj_set_style_text_color(g_bannerLabel, lv_color_hex(0xF0F0F0), 0);
-    lv_label_set_text(g_bannerLabel, "ВЕНТИЛЯТОР: ВЫКЛ");
+    setLabelTextIfChanged(g_bannerLabel, "ВЕНТИЛЯТОР: ВЫКЛ");
 
     g_cycleCountLabel = lv_label_create(g_banner);
     lv_obj_set_style_text_font(g_cycleCountLabel, &font_ru_14, 0);
     lv_obj_set_style_text_color(g_cycleCountLabel, lv_color_hex(0xC0C8D0), 0);
-    lv_label_set_text(g_cycleCountLabel, "Запусков всего: --");
+    setLabelTextIfChanged(g_cycleCountLabel, "Запусков всего: --");
 }
 
 void update() {
@@ -460,22 +484,22 @@ void update() {
 
     char buf[48];
     formatUptime(buf, sizeof(buf), millis());
-    lv_label_set_text(g_uptimeLabel, buf);
+    setLabelTextIfChanged(g_uptimeLabel, buf);
 
     if (snapshot.wifiConnected) {
         snprintf(buf, sizeof(buf), "WiFi: %d дБм", snapshot.wifiRssi);
     } else {
         snprintf(buf, sizeof(buf), "WiFi: --");
     }
-    lv_label_set_text(g_wifiLabel, buf);
+    setLabelTextIfChanged(g_wifiLabel, buf);
 
     size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     snprintf(buf, sizeof(buf), "ОЗУ: %u КБ", static_cast<unsigned>(freeHeap / 1024));
-    lv_label_set_text(g_ramLabel, buf);
+    setLabelTextIfChanged(g_ramLabel, buf);
 
-    lv_label_set_text(g_modeLabel, Relay::modeBadgeText(snapshot.settings.mode));
+    setLabelTextIfChanged(g_modeLabel, Relay::modeBadgeText(snapshot.settings.mode));
     if (snapshot.settings.seasonAutoEnabled) {
-        lv_label_set_text(g_seasonLabel, seasonRuLabel(Season::current()));
+        setLabelTextIfChanged(g_seasonLabel, seasonRuLabel(Season::current()));
         lv_obj_clear_flag(g_seasonLabel, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_obj_add_flag(g_seasonLabel, LV_OBJ_FLAG_HIDDEN);
@@ -487,11 +511,11 @@ void update() {
                                    active ? lv_color_hex(0x2E6DA4) : lv_color_hex(0x3A4048), 0);
     }
 
-    lv_label_set_text(g_bannerLabel, snapshot.relay.relayOn ? "ВЕНТИЛЯТОР: ВКЛ" : "ВЕНТИЛЯТОР: ВЫКЛ");
+    setLabelTextIfChanged(g_bannerLabel, bannerTextFor(snapshot.relay));
     lv_obj_set_style_bg_color(g_banner, bannerColorFor(snapshot.relay.relayOn), 0);
 
     snprintf(buf, sizeof(buf), "Запусков всего: %lu", (unsigned long)snapshot.relay.cycleCount);
-    lv_label_set_text(g_cycleCountLabel, buf);
+    setLabelTextIfChanged(g_cycleCountLabel, buf);
 
     if (snapshot.relay.relayOn) {
         lv_obj_clear_flag(g_spinner, LV_OBJ_FLAG_HIDDEN);

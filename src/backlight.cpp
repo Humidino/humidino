@@ -1,14 +1,12 @@
 #include "backlight.h"
 
 #include <Arduino.h>
+#include <atomic>
 
 #include "config.h"
 
-// noteActivity() вызывается из controlTask (ядро 0), а update() выполняется
-// в lvglTask (ядро 1); глобальные переменные состояния перехода ниже не
-// синхронизированы. Худший случай — один сбойный кадр перехода ровно в
-// момент смены состояния реле — чисто косметический эффект, мьютекс ради
-// этого не нужен для функции, не влияющей на безопасность.
+// Другие задачи только сообщают об активности. Яркостью, таймером и
+// плавным гашением владеет исключительно lvglTask.
 namespace {
 
 constexpr uint32_t kPwmFreqHz = 5000;
@@ -24,6 +22,7 @@ uint8_t g_fadeStartPct = 0;
 uint32_t g_fadeStartMs = 0;
 bool g_fading = false;
 uint32_t g_lastActivityMs = 0;
+std::atomic<bool> g_activityPending{false};
 
 void writeDuty(uint8_t pct) {
     uint32_t duty = (static_cast<uint32_t>(pct) * kPwmMaxDuty) / 100;
@@ -56,13 +55,16 @@ void setLevel(uint8_t pct) {
 }
 
 void noteActivity() {
-    g_lastActivityMs = millis();
-    if (g_targetPct != BACKLIGHT_FULL_PCT || g_currentPct != BACKLIGHT_FULL_PCT) {
-        startFadeTo(BACKLIGHT_FULL_PCT, g_lastActivityMs);
-    }
+    g_activityPending.store(true, std::memory_order_relaxed);
 }
 
 void update(uint32_t nowMs) {
+    if (g_activityPending.exchange(false, std::memory_order_relaxed)) {
+        g_lastActivityMs = nowMs;
+        // Пробуждение немедленное: повторные касания не перезапускают fade.
+        if (g_fading || g_currentPct != BACKLIGHT_FULL_PCT) setLevel(BACKLIGHT_FULL_PCT);
+        return;
+    }
     if (!g_fading && g_targetPct == BACKLIGHT_FULL_PCT &&
         (nowMs - g_lastActivityMs) >= BACKLIGHT_DIM_TIMEOUT_MS) {
         startFadeTo(BACKLIGHT_DIM_PCT, nowMs);
