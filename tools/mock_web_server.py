@@ -137,11 +137,16 @@ def build_state():
     crawl_live = 3 - (1 if zone1_error else 0)
 
     return {
+        "demo": True,
         "uptime_s": int(elapsed),
         "wifi_rssi": -55 + int(wobble),
         "free_heap": 210000 + random.randint(-5000, 5000),
         "season": current_season(),
-        "relay": {"on": state_str == "running", "state_str": state_str},
+        "relay": {
+            "on": state_str == "running",
+            "state_str": state_str,
+            "cycle_count": 12 + int(elapsed // 45),
+        },
         "crawlspace": {
             "live_sensors": crawl_live,
             "total_sensors": 3,

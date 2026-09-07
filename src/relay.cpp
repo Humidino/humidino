@@ -108,14 +108,17 @@ public:
             // min-runtime (это не автоматический цикл, а явный запрос "выкл").
             next = RelayControlState::Idle;
         } else if (cfg.mode == OperatingMode::ManualOn) {
-            if (!sensorsHealthy) {
-                next = RelayControlState::LockedOutSensorFault;
-            } else if (!freezeSafe) {
+            if (sensorsHealthy && !freezeSafe) {
                 next = RelayControlState::LockedOutFreeze;
             } else {
                 // Защита от конденсата и порог влажности намеренно
                 // игнорируются в ручном режиме — пользователь явно просит
                 // работать, min-pause тоже не действует (это не автоцикл).
+                // Если датчики неисправны, защиту от заморозки проверить
+                // нельзя — но кнопка ВКЛ должна включать реле в любом
+                // случае (явная команда пользователя важнее блокировки по
+                // отказу датчиков), поэтому без исправных датчиков риск
+                // берёт на себя пользователь, и реле всё равно включается.
                 next = RelayControlState::Running;
             }
         } else if (!sensorsHealthy) {
