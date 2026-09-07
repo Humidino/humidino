@@ -10,4 +10,11 @@ namespace WifiProvision {
 // портала настройки. Возвращает true только после успешного подключения.
 bool begin();
 
+// Забывает сохранённые Wi-Fi credentials (хранятся самим esp_wifi/
+// WiFiManager, а не в наших NVS-namespace — см. settings_store.cpp) — не
+// трогает пороги, пресеты и веб-пароль. Следующий begin() (после
+// перезагрузки) снова откроет портал настройки. Не перезагружает
+// устройство сам — это решает вызывающая сторона (см. web_server.cpp).
+void forgetCredentials();
+
 }  // namespace WifiProvision

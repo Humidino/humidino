@@ -6,12 +6,15 @@
 #include <LittleFS.h>
 #include <cstring>
 #include <esp_random.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include "config.h"
 #include "settings_actions.h"
 #include "settings_store.h"
 #include "shared_state.h"
 #include "telemetry.h"
+#include "wifi_provision.h"
 
 namespace {
 
@@ -183,6 +186,22 @@ void begin() {
             serializeJson(resp, out);
             req->send(200, "application/json", out);
         }));
+
+    // --- Сброс Wi-Fi (см. WifiProvision::forgetCredentials()) ---
+    // Отвечаем клиенту сразу, а сам сброс и перезагрузку откладываем на
+    // отдельную задачу — иначе ESP.restart() оборвёт соединение раньше, чем
+    // AsyncTCP успеет отправить HTTP-ответ.
+    g_server.on("/api/wifi/reset", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!requireAuthentication(req)) return;
+        req->send(200, "application/json", "{\"ok\":true}");
+        xTaskCreate(
+            [](void*) {
+                vTaskDelay(pdMS_TO_TICKS(500));
+                WifiProvision::forgetCredentials();
+                ESP.restart();
+            },
+            "wifiForget", 4096, nullptr, 1, nullptr);
+    });
 
     g_server.begin();
 }

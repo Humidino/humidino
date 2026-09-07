@@ -3,7 +3,8 @@
 Локальный мок-сервер для веб-интерфейса Humidino.
 
 Отдаёт data/index.html и имитирует REST API прошивки (/api/state,
-/api/settings, /api/presets, /api/history, /api/history/summary) со
+/api/settings, /api/presets, /api/history, /api/history/summary,
+/api/wifi/reset) со
 случайными, но правдоподобными данными — позволяет открыть и потестировать
 веб-интерфейс в браузере без реального ESP32: анимацию вентилятора,
 переключение режимов, пресеты, раздел аналитики (график и таблицу
@@ -22,6 +23,7 @@ import json
 import math
 import random
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -37,6 +39,9 @@ RELAY_STATE_CYCLE = [
     "min_pause_hold", "locked_sensor_fault",
 ]
 STATE_HOLD_SECONDS = 8  # держим каждое состояние N секунд, чтобы увидеть все баннеры
+mock_cycle_count = 12
+last_relay_running = False
+relay_state_lock = threading.Lock()
 
 settings = {
     "rh_target": 70.0,
@@ -122,12 +127,20 @@ def fake_zone(base_temp, base_rh, with_dew, error=False):
 
 
 def build_state():
+    global last_relay_running, mock_cycle_count
+
     elapsed = time.time() - START_TIME
     state_str = RELAY_STATE_CYCLE[int(elapsed // STATE_HOLD_SECONDS) % len(RELAY_STATE_CYCLE)]
     if settings["mode"] == "manual_off" and state_str not in ("locked_freeze", "locked_sensor_fault"):
         state_str = "idle"
     elif settings["mode"] == "manual_on" and state_str not in ("locked_freeze", "locked_sensor_fault"):
         state_str = "running"
+    relay_running = state_str == "running"
+    with relay_state_lock:
+        if relay_running and not last_relay_running:
+            mock_cycle_count += 1
+        last_relay_running = relay_running
+        cycle_count = mock_cycle_count
     wobble = math.sin(elapsed / 5.0) * 3
 
     # Зона 1 периодически "отваливается" (как раньше) — демонстрирует
@@ -137,11 +150,16 @@ def build_state():
     crawl_live = 3 - (1 if zone1_error else 0)
 
     return {
+        "demo": True,
         "uptime_s": int(elapsed),
         "wifi_rssi": -55 + int(wobble),
         "free_heap": 210000 + random.randint(-5000, 5000),
         "season": current_season(),
-        "relay": {"on": state_str == "running", "state_str": state_str},
+        "relay": {
+            "on": relay_running,
+            "state_str": state_str,
+            "cycle_count": cycle_count,
+        },
         "crawlspace": {
             "live_sensors": crawl_live,
             "total_sensors": 3,
@@ -217,6 +235,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             incoming = self._read_json() or {}
             settings.update({k: v for k, v in incoming.items() if k in settings})
             self._send_json(settings)
+        elif self.path == "/api/wifi/reset":
+            # На реальном устройстве тут забываются Wi-Fi credentials и идёт
+            # перезагрузка — мок только подтверждает запрос, ничего не делает.
+            self._send_json({"ok": True})
         elif self.path == "/api/presets/apply":
             incoming = self._read_json() or {}
             name = incoming.get("name")
