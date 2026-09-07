@@ -102,6 +102,11 @@
           </fieldset>
         </form>
         <article class="panel device-panel"><h2>Устройство</h2><dl><div><dt>Работает без перезагрузки</dt><dd id="deviceUptime">—</dd></div><div><dt>Сигнал Wi-Fi</dt><dd id="deviceWifi">—</dd></div><div><dt>Свободная память</dt><dd id="deviceMemory">—</dd></div><div><dt>Последнее обновление</dt><dd id="deviceUpdated">—</dd></div></dl></article>
+        <article class="panel danger-panel">
+          <h2>Сброс Wi-Fi</h2>
+          <p class="muted">Устройство забудет сохранённую сеть и перезагрузится в режим настройки — поднимет точку доступа <strong>humidino</strong>, к которой нужно будет подключиться заново (см. README, п. 4). Пороги, пресеты и журнал запусков не затрагиваются.</p>
+          <button type="button" class="button danger" id="resetWifiBtn">Сбросить Wi-Fi</button>
+        </article>
       </section>
       <footer>Humidino<span>Управление вентиляцией дома</span></footer>
     </main>

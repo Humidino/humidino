@@ -3,7 +3,8 @@
 Локальный мок-сервер для веб-интерфейса Humidino.
 
 Отдаёт data/index.html и имитирует REST API прошивки (/api/state,
-/api/settings, /api/presets, /api/history, /api/history/summary) со
+/api/settings, /api/presets, /api/history, /api/history/summary,
+/api/wifi/reset) со
 случайными, но правдоподобными данными — позволяет открыть и потестировать
 веб-интерфейс в браузере без реального ESP32: анимацию вентилятора,
 переключение режимов, пресеты, раздел аналитики (график и таблицу
@@ -222,6 +223,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             incoming = self._read_json() or {}
             settings.update({k: v for k, v in incoming.items() if k in settings})
             self._send_json(settings)
+        elif self.path == "/api/wifi/reset":
+            # На реальном устройстве тут забываются Wi-Fi credentials и идёт
+            # перезагрузка — мок только подтверждает запрос, ничего не делает.
+            self._send_json({"ok": True})
         elif self.path == "/api/presets/apply":
             incoming = self._read_json() or {}
             name = incoming.get("name")

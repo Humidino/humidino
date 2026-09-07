@@ -399,6 +399,24 @@
     }
   });
 
+  // --- Сброс Wi-Fi ---
+
+  qs("resetWifiBtn").addEventListener("click", async () => {
+    const confirmed = confirm(
+      "Устройство забудет текущую сеть Wi-Fi и перезагрузится в режим настройки. Продолжить?",
+    );
+    if (!confirmed) return;
+    qs("resetWifiBtn").disabled = true;
+    try {
+      const r = await fetch("/api/wifi/reset", { method: "POST" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      showToast("Wi-Fi сброшен, устройство перезагружается…");
+    } catch (e) {
+      showToast("Не удалось сбросить Wi-Fi", true);
+      qs("resetWifiBtn").disabled = false;
+    }
+  });
+
   // --- Тост-уведомления ---
 
   let toastTimer = null;
