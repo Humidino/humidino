@@ -16,7 +16,7 @@ struct SensorReading {
     float dewPointC = NAN;
     float absHumidityGm3 = NAN;  // г/м³
     bool valid = false;   // true после хотя бы одного успешного измерения
-    bool error = false;   // true, если последний опрос не удался (бейдж «ERR»)
+    bool error = false;   // true, если последний опрос не удался (красный крест на дашборде)
     uint32_t lastUpdateMs = 0;   // millis() на момент последнего обновления
 };
 
