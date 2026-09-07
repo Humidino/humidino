@@ -162,7 +162,8 @@
     for (let i = spanDays - 1; i >= 0; i--) {
       const dayNumber = today - i;
       const from = dayStartEpoch(dayNumber);
-      const label = i % labelEvery === 0 ? new Date(from * 1000).toISOString().slice(5, 10) : "";
+      const label =
+        i % labelEvery === 0 ? new Date((from + deviceTzOffsetSec) * 1000).toISOString().slice(5, 10) : "";
       buckets.push({ from, to: from + 86400, label });
     }
     return buckets;
@@ -170,8 +171,10 @@
 
   function renderChart(records) {
     const buckets = computeBuckets();
-    const counts = buckets.map((b) => records.filter((r) => r.start_epoch && r.start_epoch >= b.from && r.start_epoch < b.to).length);
-    const max = Math.max(1, ...counts);
+    const runtimeMinutes = buckets.map((b) =>
+      records.reduce((sum, r) => sum + overlapSeconds(r, b.from, b.to), 0) / 60,
+    );
+    const max = Math.max(1, ...runtimeMinutes);
 
     const width = 640;
     const height = 220;
@@ -185,8 +188,8 @@
     svg.setAttribute("height", height);
 
     buckets.forEach((bucket, i) => {
-      const c = counts[i];
-      const barH = (c / max) * (height - 28);
+      const minutes = runtimeMinutes[i];
+      const barH = (minutes / max) * (height - 28);
       const x = i * (barW + barGap);
       const rect = document.createElementNS(svgNS, "rect");
       rect.setAttribute("x", x);
@@ -194,17 +197,17 @@
       rect.setAttribute("width", Math.max(1, barW));
       rect.setAttribute("height", barH);
       rect.setAttribute("rx", 2);
-      rect.setAttribute("fill", c > 0 ? "var(--accent)" : "var(--line)");
+      rect.setAttribute("fill", minutes > 0 ? "var(--accent)" : "var(--line)");
       svg.appendChild(rect);
 
-      if (c > 0) {
+      if (minutes > 0) {
         const countText = document.createElementNS(svgNS, "text");
         countText.setAttribute("x", x + barW / 2);
         countText.setAttribute("y", height - barH - 24);
         countText.setAttribute("font-size", "10");
         countText.setAttribute("fill", "var(--muted)");
         countText.setAttribute("text-anchor", "middle");
-        countText.textContent = c;
+        countText.textContent = Math.round(minutes);
         svg.appendChild(countText);
       }
       if (bucket.label) {
@@ -225,10 +228,10 @@
 
     qs("chartNote").textContent =
       periodDays === 1
-        ? "Запусков по часам (время устройства)."
+        ? "Минуты работы по часам (время устройства)."
         : periodDays === 0 && buckets.length >= MAX_ALL_TIME_CHART_DAYS
-          ? `По сохранённым запускам. Показаны последние ${MAX_ALL_TIME_CHART_DAYS} дней — более старые видны в таблице ниже.`
-          : "По сохранённым запускам. Запуск через полночь разделяется между днями.";
+          ? `Минуты работы по сохранённым запускам. Показаны последние ${MAX_ALL_TIME_CHART_DAYS} дней — более старые видны в таблице ниже.`
+          : "Минуты работы по сохранённым запускам. Запуск через полночь разделяется между днями.";
   }
 
   // --- Таблица журнала ---
@@ -240,8 +243,11 @@
 
   function filteredRecords() {
     const filter = qs("reasonFilter").value;
-    if (filter === "all") return allRecords;
-    return allRecords.filter((r) => categoryFor(r) === filter);
+    const windowStart = periodWindowStart();
+    const records =
+      windowStart === null ? allRecords : allRecords.filter((r) => r.start_epoch && r.start_epoch >= windowStart);
+    if (filter === "all") return records;
+    return records.filter((r) => categoryFor(r) === filter);
   }
 
   function renderHistoryRows() {
@@ -287,6 +293,11 @@
 
   // --- CSV ---
 
+  function csvField(value) {
+    const text = value === null || value === undefined ? "" : String(value);
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  }
+
   function toCsv(records) {
     const header = [
       "Начало",
@@ -316,7 +327,7 @@
       r.end.outside_rh ?? "",
       r.end.outside_temp_c ?? "",
     ]);
-    return [header, ...rows].map((row) => row.join(",")).join("\r\n");
+    return [header, ...rows].map((row) => row.map(csvField).join(",")).join("\r\n");
   }
 
   qs("exportCsv").addEventListener("click", () => {
@@ -373,7 +384,6 @@
   qs("refreshHistory").addEventListener("click", loadHistory);
 
   loadHistory();
-  setInterval(loadHistorySummary, 30000);
   // Журнал меняется редко (минимум раз в MIN_RUNTIME_MS/MIN_PAUSE_MS) —
   // незачем опрашивать чаще.
   setInterval(loadHistory, 30000);
