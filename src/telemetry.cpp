@@ -28,6 +28,8 @@ void buildStateJson(JsonDocument& doc) {
     relay["state"] = static_cast<int>(s.relay.state);      // числовой код, для обратной совместимости
     relay["state_str"] = toString(s.relay.state);           // машиночитаемый id, напр. "locked_freeze"
     relay["cycle_count"] = s.relay.cycleCount;               // сколько раз включалось за всё время (переживает перезагрузки)
+    // Сколько секунд длится текущий цикл работы, 0 — если сейчас выключено.
+    relay["runtime_s"] = s.relay.relayOn ? (millis() - s.relay.lastOnMs) / 1000 : 0;
 
     static const char* kKeys[] = {"crawl_intake", "crawl_mid", "crawl_far", "outside"};
     JsonObject zones = doc["zones"].to<JsonObject>();
@@ -55,6 +57,7 @@ void buildSettingsJson(JsonDocument& doc) {
     doc["freeze_c"] = settings.freezeProtectC;
     doc["min_runtime_ms"] = settings.minRuntimeMs;
     doc["min_pause_ms"] = settings.minPauseMs;
+    doc["max_runtime_ms"] = settings.maxRuntimeMs;
     doc["mode"] = toString(settings.mode);
     doc["season_auto"] = settings.seasonAutoEnabled;
 }

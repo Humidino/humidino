@@ -17,6 +17,7 @@
     locked_condensation: "Прервано: защита от конденсата",
     sensor_fault: "Прервано: ошибка датчика",
     interrupted: "Прервано перезагрузкой устройства",
+    max_runtime_exceeded: "Прервано: максимальное время работы",
     unknown: "Работает сейчас",
   };
 
@@ -27,6 +28,7 @@
     locked_condensation: "protection",
     sensor_fault: "protection",
     interrupted: "interrupted",
+    max_runtime_exceeded: "protection",
   };
 
   let deviceTzOffsetSec = 0;

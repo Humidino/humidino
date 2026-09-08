@@ -30,6 +30,7 @@
     locked_freeze: "Пауза: защита от мороза",
     min_pause_hold: "Пауза между запусками",
     locked_sensor_fault: "Ошибка датчиков",
+    locked_max_runtime: "Пауза: превышено макс. время работы",
   };
   const BANNER_EXPLANATION = {
     idle: "Влажность в норме, вентиляция не требуется.",
@@ -41,6 +42,8 @@
     min_pause_hold:
       "Соблюдается минимальная пауза между запусками, чтобы не гонять реле слишком часто.",
     locked_sensor_fault: "Не хватает исправных датчиков для безопасного автоматического решения.",
+    locked_max_runtime:
+      "Вентилятор проработал непрерывно дольше заданного аварийного потолка и был принудительно остановлен.",
   };
   const MODE_TEXT = { auto: "АВТО", manual_on: "РУЧНОЕ ВКЛ", manual_off: "РУЧНОЕ ВЫКЛ" };
   const SEASON_TEXT = { winter: "Зима", spring: "Весна", summer: "Лето", autumn: "Осень" };
@@ -50,7 +53,8 @@
 
   let failures = 0;
   let isDemo = false;
-  let runStartMs = null; // клиентское время старта текущего запуска реле (нет метки на устройстве)
+  let lastRuntimeS = 0; // relay.runtime_s с последнего опроса /api/state — источник истины, идёт с устройства
+  let lastRuntimeFetchMs = 0; // клиентское время этого опроса — от него тикает секундомер между опросами
   let wasRunning = false;
   let lastSettings = null; // последние настройки, полученные от устройства
 
@@ -182,12 +186,12 @@
     }
   }
 
-  function renderRunTimer(relayOn, cycleCount) {
+  function renderRunTimer(relayOn, runtimeS, cycleCount) {
     if (relayOn) {
-      if (runStartMs === null) runStartMs = Date.now();
-      qs("runTimer").textContent = "Работает " + fmtRunClock(Date.now() - runStartMs);
+      lastRuntimeS = runtimeS || 0;
+      lastRuntimeFetchMs = Date.now();
+      qs("runTimer").textContent = "Работает " + fmtRunClock(lastRuntimeS * 1000);
     } else {
-      runStartMs = null;
       qs("runTimer").textContent = cycleCount !== undefined ? `Циклов всего: ${cycleCount}` : "—";
     }
   }
@@ -203,7 +207,7 @@
     qs("relayActual").textContent = relayOn ? "РЕЛЕ: ВКЛЮЧЕНО" : "РЕЛЕ: ВЫКЛЮЧЕНО";
     qs("bannerLabel").textContent = BANNER_LABEL[stateKey] || stateKey;
     qs("statusExplanation").textContent = BANNER_EXPLANATION[stateKey] || "";
-    renderRunTimer(relayOn, s.relay && s.relay.cycle_count);
+    renderRunTimer(relayOn, s.relay && s.relay.runtime_s, s.relay && s.relay.cycle_count);
 
     const fan = qs("fanIcon");
     fan.classList.toggle("spinning", relayOn);
@@ -231,8 +235,9 @@
   // Живой тикер таймера запуска — обновляет только текст, без опроса сети,
   // чтобы счётчик шёл плавно между опросами /api/state раз в 3 секунды.
   setInterval(() => {
-    if (wasRunning && runStartMs !== null) {
-      qs("runTimer").textContent = "Работает " + fmtRunClock(Date.now() - runStartMs);
+    if (wasRunning) {
+      const elapsedMs = lastRuntimeS * 1000 + (Date.now() - lastRuntimeFetchMs);
+      qs("runTimer").textContent = "Работает " + fmtRunClock(elapsedMs);
     }
   }, 1000);
 
@@ -268,7 +273,7 @@
 
   // --- Настройки ---
 
-  const FIELD_IDS = ["rh_target", "hysteresis_pct", "freeze_c", "min_runtime_min", "min_pause_min"];
+  const FIELD_IDS = ["rh_target", "hysteresis_pct", "freeze_c", "min_runtime_min", "min_pause_min", "max_runtime_min"];
 
   function msToMin(ms) {
     return Math.round(ms / 60000);
@@ -280,6 +285,7 @@
     qs("freeze_c").value = s.freeze_c;
     qs("min_runtime_min").value = msToMin(s.min_runtime_ms);
     qs("min_pause_min").value = msToMin(s.min_pause_ms);
+    qs("max_runtime_min").value = msToMin(s.max_runtime_ms);
     qs("season_auto").checked = !!s.season_auto;
     updateDirtyBadge();
     updateRulePreview();
@@ -298,6 +304,7 @@
       freeze_c: parseFloat(qs("freeze_c").value),
       min_runtime_ms: Math.round(parseFloat(qs("min_runtime_min").value || "0") * 60000),
       min_pause_ms: Math.round(parseFloat(qs("min_pause_min").value || "0") * 60000),
+      max_runtime_ms: Math.round(parseFloat(qs("max_runtime_min").value || "0") * 60000),
     };
   }
 
@@ -309,7 +316,8 @@
       v.hysteresis_pct !== lastSettings.hysteresis_pct ||
       v.freeze_c !== lastSettings.freeze_c ||
       v.min_runtime_ms !== lastSettings.min_runtime_ms ||
-      v.min_pause_ms !== lastSettings.min_pause_ms;
+      v.min_pause_ms !== lastSettings.min_pause_ms ||
+      v.max_runtime_ms !== lastSettings.max_runtime_ms;
     qs("dirtyBadge").hidden = !dirty;
   }
 

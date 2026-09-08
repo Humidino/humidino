@@ -117,6 +117,8 @@ const char* toString(StopReason reason) {
             return "sensor_fault";
         case StopReason::Interrupted:
             return "interrupted";
+        case StopReason::MaxRuntimeExceeded:
+            return "max_runtime_exceeded";
         case StopReason::Unknown:
         default:
             return "unknown";

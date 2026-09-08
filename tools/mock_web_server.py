@@ -36,7 +36,7 @@ LOCAL_TZ_OFFSET_SEC = 3 * 3600
 # устройстве состояние определяется алгоритмом, а не таймером.
 RELAY_STATE_CYCLE = [
     "idle", "running", "locked_condensation", "locked_freeze",
-    "min_pause_hold", "locked_sensor_fault",
+    "min_pause_hold", "locked_sensor_fault", "locked_max_runtime",
 ]
 STATE_HOLD_SECONDS = 8  # держим каждое состояние N секунд, чтобы увидеть все баннеры
 mock_cycle_count = 12
@@ -49,6 +49,7 @@ settings = {
     "freeze_c": 2.0,
     "min_runtime_ms": 10 * 60 * 1000,
     "min_pause_ms": 15 * 60 * 1000,
+    "max_runtime_ms": 60 * 60 * 1000,
     "mode": "auto",
     "season_auto": True,
 }
@@ -80,7 +81,7 @@ presets = [
 # Правдоподобная, но не настоящая история циклов реле за последние ~10 дней —
 # только чтобы потестировать вёрстку графика и таблицы /api/history без
 # реального устройства (см. README §5.1).
-STOP_REASONS = ["hysteresis_reached"] * 6 + ["locked_freeze", "locked_condensation", "manual_off"]
+STOP_REASONS = ["hysteresis_reached"] * 6 + ["locked_freeze", "locked_condensation", "manual_off", "max_runtime_exceeded"]
 
 
 def build_fake_history():
@@ -126,14 +127,16 @@ def fake_zone(base_temp, base_rh, with_dew, error=False):
     return zone
 
 
-def build_state():
-    global last_relay_running, mock_cycle_count
+_relay_on_since = None  # эпоха, с которой реле непрерывно "включено" в моке — для relay.runtime_s
 
+
+def build_state():
+    global _relay_on_since, last_relay_running, mock_cycle_count
     elapsed = time.time() - START_TIME
     state_str = RELAY_STATE_CYCLE[int(elapsed // STATE_HOLD_SECONDS) % len(RELAY_STATE_CYCLE)]
-    if settings["mode"] == "manual_off" and state_str not in ("locked_freeze", "locked_sensor_fault"):
+    if settings["mode"] == "manual_off" and state_str not in ("locked_freeze", "locked_sensor_fault", "locked_max_runtime"):
         state_str = "idle"
-    elif settings["mode"] == "manual_on" and state_str not in ("locked_freeze", "locked_sensor_fault"):
+    elif settings["mode"] == "manual_on" and state_str not in ("locked_freeze", "locked_sensor_fault", "locked_max_runtime"):
         state_str = "running"
     relay_running = state_str == "running"
     with relay_state_lock:
@@ -142,6 +145,14 @@ def build_state():
         last_relay_running = relay_running
         cycle_count = mock_cycle_count
     wobble = math.sin(elapsed / 5.0) * 3
+
+    relay_on = state_str == "running"
+    now = time.time()
+    if relay_on and _relay_on_since is None:
+        _relay_on_since = now
+    elif not relay_on:
+        _relay_on_since = None
+    runtime_s = int(now - _relay_on_since) if relay_on else 0
 
     # Зона 1 периодически "отваливается" (как раньше) — демонстрирует
     # деградированный режим (2 из 3 живых), а не полную блокировку, раз
@@ -156,8 +167,9 @@ def build_state():
         "free_heap": 210000 + random.randint(-5000, 5000),
         "season": current_season(),
         "relay": {
-            "on": relay_running,
+            "on": relay_on,
             "state_str": state_str,
+            "runtime_s": runtime_s,
             "cycle_count": cycle_count,
         },
         "crawlspace": {

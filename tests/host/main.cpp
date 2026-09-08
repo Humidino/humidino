@@ -95,6 +95,40 @@ int main() {
     testState.readings[2].error = true; evaluate();
     check(!testState.relay.relayOn, "loss of all crawlspace sensors stops relay");
 
+    healthyReadings();
+    RuntimeSettings lockoutSettings = testState.settings;
+    lockoutSettings.mode = OperatingMode::ManualOn;
+    lockoutSettings.maxRuntimeMs = 2000;
+    lockoutSettings.minPauseMs = 5000;
+    RelayController lockoutController;
+    lockoutController.begin(lockoutSettings.minPauseMs);
+    auto evaluateLockout = [&](uint32_t advanceMs) {
+        testNow += advanceMs;
+        lockoutController.update(testState.readings, lockoutSettings, testNow);
+    };
+    evaluateLockout(1000);
+    check(lockoutController.status().relayOn, "max-runtime scenario starts in manual on");
+    evaluateLockout(lockoutSettings.maxRuntimeMs);
+    check(lockoutController.status().state == RelayControlState::LockedOutMaxRuntime,
+          "max runtime stops manual operation");
+    lockoutSettings.mode = OperatingMode::ManualOff;
+    evaluateLockout(1000);
+    check(lockoutController.status().state == RelayControlState::Idle,
+          "manual off may display idle during max-runtime pause");
+    lockoutSettings.mode = OperatingMode::ManualOn;
+    evaluateLockout(1000);
+    check(!lockoutController.status().relayOn, "manual on cannot bypass max-runtime pause after manual off");
+    lockoutSettings.mode = OperatingMode::Auto;
+    for (size_t i = 0; i < 3; ++i) testState.readings[i].humidityPct = 50;
+    evaluateLockout(1000);
+    check(lockoutController.status().state == RelayControlState::Idle,
+          "automatic humidity control may return max-runtime lockout to idle");
+    lockoutSettings.mode = OperatingMode::ManualOn;
+    evaluateLockout(1000);
+    check(!lockoutController.status().relayOn, "manual on cannot bypass max-runtime pause after auto idle");
+    evaluateLockout(1000);
+    check(lockoutController.status().relayOn, "manual on starts when max-runtime pause expires");
+
     lv_init();
     lv_display_t* display = lv_display_create(480, 320);
     lv_obj_t* parent = lv_obj_create(lv_screen_active());
@@ -102,6 +136,7 @@ int main() {
     lv_obj_set_style_border_width(parent, 0, 0);
     UiDashboard::build(parent);
     lv_obj_update_layout(parent);
+    check(lv_obj_get_height(g_banner) >= 78, "dashboard banner has room for all status rows");
     for (auto* btn : g_modeButtons) {
         auto* row = lv_obj_get_parent(btn);
         lv_area_t buttonArea, rowArea;

@@ -29,6 +29,8 @@ RunLog::StopReason stopReasonFor(RelayControlState next, OperatingMode mode) {
             return RunLog::StopReason::LockedCondensation;
         case RelayControlState::LockedOutSensorFault:
             return RunLog::StopReason::SensorFault;
+        case RelayControlState::LockedOutMaxRuntime:
+            return RunLog::StopReason::MaxRuntimeExceeded;
         default:
             return (mode == OperatingMode::ManualOff) ? RunLog::StopReason::ManualOff
                                                        : RunLog::StopReason::HysteresisReached;
@@ -77,6 +79,7 @@ public:
         pinMode(PIN_RELAY_SSR, OUTPUT);
         setRelayPin(false);
         status_ = RelayStatus{};
+        maxRuntimePauseActive_ = false;
         status_.stateEnteredMs = millis();
         status_.lastOffMs = status_.stateEnteredMs - initialMinPauseMs - 1;
         status_.cycleCount = Settings::loadCycleCount();
@@ -101,6 +104,25 @@ public:
         // поэтому при неисправности считаем условие небезопасным.
         bool freezeSafe = sensorsHealthy && (outside.temperatureC > cfg.freezeProtectC);
 
+        // Аварийный потолок непрерывной работы (см. MAX_RUNTIME_MS в
+        // config.h) — независимая защита от сценариев вроде залипшего
+        // высокого показания влажности или бесконечного ручного режима ВКЛ,
+        // где обычная логика (гистерезис) никогда не попросит выключиться.
+        // maxRuntimeMs == 0 отключает проверку.
+        bool maxRuntimeExceeded = cfg.maxRuntimeMs > 0 && status_.state == RelayControlState::Running &&
+                                   (nowMs - status_.stateEnteredMs) >= cfg.maxRuntimeMs;
+
+        // Состояние UI может смениться на Idle (например, после ManualOff или
+        // когда влажность уже ниже порога), но аварийная пауза после достижения
+        // max-runtime должна пережить такую смену состояния. Снимаем её только
+        // после полной minPauseMs; вычитание остаётся корректным при переполнении
+        // millis().
+        if (maxRuntimeExceeded) {
+            maxRuntimePauseActive_ = true;
+        } else if (maxRuntimePauseActive_ && (nowMs - status_.lastOffMs) >= cfg.minPauseMs) {
+            maxRuntimePauseActive_ = false;
+        }
+
         RelayControlState next = status_.state;
 
         if (cfg.mode == OperatingMode::ManualOff) {
@@ -110,6 +132,11 @@ public:
         } else if (cfg.mode == OperatingMode::ManualOn) {
             if (sensorsHealthy && !freezeSafe) {
                 next = RelayControlState::LockedOutFreeze;
+            } else if (maxRuntimePauseActive_) {
+                // В отличие от обычной ручной остановки, паузу после достижения
+                // max-runtime нельзя обойти сменой режима или промежуточным
+                // переходом состояния в Idle.
+                next = RelayControlState::LockedOutMaxRuntime;
             } else {
                 // Защита от конденсата и порог влажности намеренно
                 // игнорируются в ручном режиме — пользователь явно просит
@@ -136,6 +163,8 @@ public:
                     next = RelayControlState::LockedOutFreeze;
                 } else if (!condensationSafe) {
                     next = RelayControlState::LockedOutCondensation;
+                } else if (maxRuntimeExceeded) {
+                    next = RelayControlState::LockedOutMaxRuntime;
                 } else {
                     bool minRuntimeElapsed = (nowMs - status_.stateEnteredMs) >= cfg.minRuntimeMs;
                     bool belowHysteresis = crawlRh < (cfg.rhTargetPercent - cfg.hysteresisPercent);
@@ -144,6 +173,9 @@ public:
                     }
                 }
             } else {
+                // Автоматический перезапуск и после гистерезиса, и после
+                // max-runtime использует одну lastOffMs-паузу. Отдельный флаг
+                // выше нужен только затем, чтобы эту паузу не обошёл ManualOn.
                 if (!freezeSafe) {
                     next = RelayControlState::LockedOutFreeze;
                 } else if (!condensationSafe) {
@@ -166,6 +198,7 @@ public:
 
 private:
     RelayStatus status_;
+    bool maxRuntimePauseActive_ = false;
 
     void transitionTo(RelayControlState next, uint32_t nowMs, const SensorReading& outside,
                        const CrawlspaceSummary& crawl, OperatingMode mode) {

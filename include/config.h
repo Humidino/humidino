@@ -97,6 +97,12 @@ constexpr uint32_t SENSOR_OFFLINE_RETRY_MS  = 60UL * 1000;  // 60 с — как 
 constexpr uint32_t CONTROL_EVAL_INTERVAL_MS = 1000;   // 1000 мс = 1 с — период оценки состояния реле
 constexpr uint32_t MIN_RUNTIME_MS           = 10UL * 60 * 1000;  // 10 мин минимальной работы
 constexpr uint32_t MIN_PAUSE_MS             = 15UL * 60 * 1000;  // 15 мин минимальной паузы
+// Аварийный потолок непрерывной работы реле — защита не от логики осушения
+// (та и так останавливается по гистерезису), а от сценариев вроде залипшего
+// показания датчика или бесконечного ручного режима ВКЛ, где иначе вентилятор
+// может работать сколько угодно. 0 — ограничение отключено. См. relay.cpp:
+// после срабатывания реле уходит на minPauseMs и может снова запуститься.
+constexpr uint32_t MAX_RUNTIME_MS           = 60UL * 60 * 1000;  // 1 час
 
 constexpr float DEFAULT_RH_TARGET_PERCENT   = 70.0f;  // % — порог влажности подпола
 constexpr float DEFAULT_HYSTERESIS_PERCENT  = 5.0f;   // % — гистерезис по влажности
