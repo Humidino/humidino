@@ -115,6 +115,7 @@ void begin() {
             if (body["freeze_c"].is<float>()) settings.freezeProtectC = body["freeze_c"];
             if (body["min_runtime_ms"].is<uint32_t>()) settings.minRuntimeMs = body["min_runtime_ms"];
             if (body["min_pause_ms"].is<uint32_t>()) settings.minPauseMs = body["min_pause_ms"];
+            if (body["max_runtime_ms"].is<uint32_t>()) settings.maxRuntimeMs = body["max_runtime_ms"];
             if (body["mode"].is<const char*>()) settings.mode = operatingModeFromString(body["mode"]);
             if (body["season_auto"].is<bool>()) settings.seasonAutoEnabled = body["season_auto"];
 

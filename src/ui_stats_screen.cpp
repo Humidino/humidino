@@ -65,6 +65,8 @@ const char* reasonText(RunLog::StopReason reason) {
             return "конденсат";
         case RunLog::StopReason::SensorFault:
             return "ERR";
+        case RunLog::StopReason::MaxRuntimeExceeded:
+            return "лимит времени";
         case RunLog::StopReason::Interrupted:
             return "перезагрузка";
         case RunLog::StopReason::Unknown:

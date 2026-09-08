@@ -26,7 +26,10 @@ enum class RelayControlState : uint8_t {
     LockedOutCondensation,
     LockedOutFreeze,
     MinPauseHold,
-    LockedOutSensorFault
+    LockedOutSensorFault,
+    // Добавлено в конец — значение используется как числовой код в JSON-API
+    // (см. Telemetry::buildStateJson), существующие коды менять нельзя.
+    LockedOutMaxRuntime
 };
 
 // Режим управления вентиляцией, выбирается пользователем (веб-интерфейс —
@@ -69,6 +72,12 @@ struct RuntimeSettings {
     float freezeProtectC = FREEZE_PROTECT_TEMP_C;
     uint32_t minRuntimeMs = MIN_RUNTIME_MS;
     uint32_t minPauseMs = MIN_PAUSE_MS;
+    // Аварийный потолок непрерывной работы реле, 0 = отключено — см.
+    // MAX_RUNTIME_MS в config.h и RelayControlState::LockedOutMaxRuntime в
+    // relay.cpp. Сознательно не входит в сезонные профили/пресеты
+    // (season.cpp, PresetValues) — это не порог осушения, а независимая
+    // защита, которая не должна меняться при смене сезона или пресета.
+    uint32_t maxRuntimeMs = MAX_RUNTIME_MS;
     OperatingMode mode = OperatingMode::Auto;
     // Если true — фоновая задача Season (см. season.h) сама подставляет сюда
     // пороги/тайминги текущего календарного сезона (профили подобраны под

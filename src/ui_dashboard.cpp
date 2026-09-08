@@ -53,6 +53,7 @@ lv_obj_t* g_seasonLabel;
 lv_obj_t* g_banner;
 lv_obj_t* g_bannerLabel;
 lv_obj_t* g_cycleCountLabel;
+lv_obj_t* g_runtimeLabel;  // "Работает: мм:сс", видна только пока реле включено — см. update()
 lv_obj_t* g_spinner;  // видна и крутится только пока реле включено — см. update()
 lv_obj_t* g_modeButtons[3];  // Авто/Вкл/Выкл, индекс соответствует OperatingMode
 ZonePanelWidgets g_panels[static_cast<size_t>(SensorId::Count)];
@@ -196,6 +197,23 @@ void formatUptime(char* out, size_t outSize, uint32_t ms) {
               (unsigned long)mins);
 }
 
+// Сколько крутится вентилятор в текущем цикле — счёт на секунды, а не минуты
+// как в formatUptime(): типичный цикл (см. MIN_RUNTIME_MS/MAX_RUNTIME_MS в
+// config.h) укладывается в минуты, и секунды здесь — единственный признак
+// того, что цифры вообще живые и обновляются, а не зависший дашборд.
+void formatRuntime(char* out, size_t outSize, uint32_t ms) {
+    uint32_t totalSec = ms / 1000;
+    uint32_t hours = totalSec / 3600;
+    uint32_t mins = (totalSec % 3600) / 60;
+    uint32_t secs = totalSec % 60;
+    if (hours > 0) {
+        snprintf(out, outSize, "Работает: %lu:%02lu:%02lu", (unsigned long)hours, (unsigned long)mins,
+                  (unsigned long)secs);
+    } else {
+        snprintf(out, outSize, "Работает: %lu:%02lu", (unsigned long)mins, (unsigned long)secs);
+    }
+}
+
 void updateZonePanel(const ZonePanelWidgets& w, const SensorReading& r) {
     char buf[32];
 
@@ -239,6 +257,7 @@ const char* bannerTextFor(const RelayStatus& status) {
         case RelayControlState::LockedOutFreeze: return "ВЫКЛ: защита от холода";
         case RelayControlState::LockedOutCondensation: return "ВЫКЛ: риск конденсата";
         case RelayControlState::MinPauseHold: return "ВЫКЛ: минимальная пауза";
+        case RelayControlState::LockedOutMaxRuntime: return "ВЫКЛ: макс. время работы";
         default: return "ВЕНТИЛЯТОР: ВЫКЛ";
     }
 }
@@ -370,6 +389,12 @@ void build(lv_obj_t* parent) {
     lv_obj_set_style_text_color(g_bannerLabel, lv_color_hex(0xF0F0F0), 0);
     setLabelTextIfChanged(g_bannerLabel, "ВЕНТИЛЯТОР: ВЫКЛ");
 
+    g_runtimeLabel = lv_label_create(g_banner);
+    lv_obj_set_style_text_font(g_runtimeLabel, &font_ru_14, 0);
+    lv_obj_set_style_text_color(g_runtimeLabel, lv_color_hex(0xC0C8D0), 0);
+    setLabelTextIfChanged(g_runtimeLabel, "");
+    lv_obj_add_flag(g_runtimeLabel, LV_OBJ_FLAG_HIDDEN);  // виден только пока реле включено, см. update()
+
     g_cycleCountLabel = lv_label_create(g_banner);
     lv_obj_set_style_text_font(g_cycleCountLabel, &font_ru_14, 0);
     lv_obj_set_style_text_color(g_cycleCountLabel, lv_color_hex(0xC0C8D0), 0);
@@ -421,8 +446,12 @@ void update() {
 
     if (snapshot.relay.relayOn) {
         lv_obj_clear_flag(g_spinner, LV_OBJ_FLAG_HIDDEN);
+        formatRuntime(buf, sizeof(buf), millis() - snapshot.relay.lastOnMs);
+        setLabelTextIfChanged(g_runtimeLabel, buf);
+        lv_obj_clear_flag(g_runtimeLabel, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_obj_add_flag(g_spinner, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_runtimeLabel, LV_OBJ_FLAG_HIDDEN);
     }
 }
 

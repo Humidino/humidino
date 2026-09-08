@@ -41,6 +41,8 @@ const char* toString(RelayControlState state) {
             return "min_pause_hold";
         case RelayControlState::LockedOutSensorFault:
             return "locked_sensor_fault";
+        case RelayControlState::LockedOutMaxRuntime:
+            return "locked_max_runtime";
         case RelayControlState::Idle:
         default:
             return "idle";

@@ -111,6 +111,12 @@
         letter-spacing: 0.03em;
         margin-top: 2px;
       }
+      #runtimeBadge {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.75);
+        letter-spacing: 0.03em;
+        margin-top: 2px;
+      }
 
       /* --- Автосезон --- */
       .season-toggle {
@@ -413,6 +419,7 @@
           <div id="bannerLabel">—</div>
           <div id="modeBadge">АВТО</div>
           <div id="seasonBadge"></div>
+          <div id="runtimeBadge" style="display: none"></div>
         </div>
       </div>
       <div class="mode-switch" style="margin-top: 14px">
@@ -462,6 +469,13 @@
             <input type="number" step="1" min="0" id="min_pause_min" />
           </div>
         </div>
+        <label>Макс. время непрерывной работы, мин</label>
+        <div class="hint">
+          Аварийный потолок — принудительно выключает вентилятор, даже в
+          ручном режиме "Вкл", если он проработал дольше этого времени
+          (например, из-за залипшего показания датчика). 0 = без ограничения.
+        </div>
+        <input type="number" step="1" min="0" id="max_runtime_min" />
         <button type="submit">
           Сохранить<span class="saved-flash" id="settingsSaved"
             >✓ сохранено</span
@@ -528,6 +542,7 @@
         locked_freeze: "ЗАПРЕТ ПО МОРОЗУ",
         min_pause_hold: "ОЖИДАНИЕ",
         locked_sensor_fault: "ОШИБКА ДАТЧИКА",
+        locked_max_runtime: "ЗАПРЕТ ПО ВРЕМЕНИ",
       };
       const bannerColor = {
         idle: "#2a3542",
@@ -536,6 +551,7 @@
         locked_freeze: "#5c4319",
         min_pause_hold: "#2a3542",
         locked_sensor_fault: "#5c1f1f",
+        locked_max_runtime: "#5c4319",
       };
       const modeText = {
         auto: "АВТО",
@@ -553,6 +569,15 @@
 
       function fmtMinRuntime(ms) {
         return Math.round(ms / 60000);
+      }
+
+      function fmtRuntimeSec(totalSec) {
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+        const mm = String(m).padStart(2, "0");
+        const ss = String(s).padStart(2, "0");
+        return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
       }
 
       async function refreshState() {
@@ -578,6 +603,14 @@
           const fan = document.getElementById("fanIcon");
           fan.classList.toggle("spinning", !!s.relay.on);
           fan.style.opacity = s.relay.on ? "1" : ".35";
+
+          const runtimeEl = document.getElementById("runtimeBadge");
+          if (s.relay.on) {
+            runtimeEl.textContent = "Работает: " + fmtRuntimeSec(s.relay.runtime_s || 0);
+            runtimeEl.style.display = "";
+          } else {
+            runtimeEl.style.display = "none";
+          }
 
           const zonesEl = document.getElementById("zones");
           zonesEl.innerHTML = "";
@@ -631,6 +664,9 @@
         document.getElementById("min_pause_min").value = fmtMinRuntime(
           s.min_pause_ms,
         );
+        document.getElementById("max_runtime_min").value = fmtMinRuntime(
+          s.max_runtime_ms,
+        );
         document.getElementById("season_auto").checked = !!s.season_auto;
         setModeButtons(s.mode || "auto");
       }
@@ -677,6 +713,10 @@
             ),
             min_pause_ms: Math.round(
               parseFloat(document.getElementById("min_pause_min").value) *
+                60000,
+            ),
+            max_runtime_ms: Math.round(
+              parseFloat(document.getElementById("max_runtime_min").value) *
                 60000,
             ),
           };
@@ -783,6 +823,7 @@
         locked_condensation: "Прервано: защита от конденсата",
         sensor_fault: "Прервано: ошибка датчика",
         interrupted: "Прервано перезагрузкой устройства",
+        max_runtime_exceeded: "Прервано: максимальное время работы",
       };
       const kHistoryPageSize = 200; // потолок одного запроса в web_server.cpp; график догружает следующие страницы
       const kHistoryDays = 14;

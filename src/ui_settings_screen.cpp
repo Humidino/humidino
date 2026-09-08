@@ -19,6 +19,7 @@ enum RowIndex {
     kFreezeC,
     kMinRuntimeMin,
     kMinPauseMin,
+    kMaxRuntimeMin,
     kRowCount
 };
 
@@ -162,6 +163,7 @@ void onSaveClicked(lv_event_t*) {
     settings.freezeProtectC = static_cast<float>(g_rows[kFreezeC].value) / kDecimalScale;
     settings.minRuntimeMs = static_cast<uint32_t>(g_rows[kMinRuntimeMin].value) * 60000UL;
     settings.minPauseMs = static_cast<uint32_t>(g_rows[kMinPauseMin].value) * 60000UL;
+    settings.maxRuntimeMs = static_cast<uint32_t>(g_rows[kMaxRuntimeMin].value) * 60000UL;
     settings.seasonAutoEnabled = lv_obj_has_state(g_seasonAutoSwitch, LV_STATE_CHECKED);
 
     // Включили автосезон этим же сохранением — подставляем профиль текущего
@@ -199,6 +201,10 @@ void build(lv_obj_t* parent) {
     // Мин. время работы/паузы, целые минуты 0-180
     buildRow(parent, kMinRuntimeMin, "Мин. время работы, мин", 0, 180, 1, false);
     buildRow(parent, kMinPauseMin, "Мин. пауза, мин", 0, 180, 1, false);
+    // Аварийный потолок непрерывной работы, 0-720 мин (0 = без ограничения),
+    // шаг 10 — независимая защита, не входит в сезонные профили/пресеты
+    // (см. RuntimeSettings::maxRuntimeMs в shared_state.h).
+    buildRow(parent, kMaxRuntimeMin, "Макс. время работы, мин", 0, 720, 10, false);
 
     // --- Автосезон: подставляет пороги/тайминги выше сама, по календарю ---
     // (профили под климат Лотошино, МО — см. docs/SEASONAL_LOTOSHINO.md).
@@ -255,6 +261,7 @@ void refresh() {
     g_rows[kFreezeC].value = static_cast<int32_t>(lroundf(settings.freezeProtectC * kDecimalScale));
     g_rows[kMinRuntimeMin].value = static_cast<int32_t>(settings.minRuntimeMs / 60000UL);
     g_rows[kMinPauseMin].value = static_cast<int32_t>(settings.minPauseMs / 60000UL);
+    g_rows[kMaxRuntimeMin].value = static_cast<int32_t>(settings.maxRuntimeMs / 60000UL);
     for (int i = 0; i < kRowCount; ++i) updateRowLabel(static_cast<RowIndex>(i));
 
     if (settings.seasonAutoEnabled) lv_obj_add_state(g_seasonAutoSwitch, LV_STATE_CHECKED);

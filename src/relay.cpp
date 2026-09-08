@@ -29,6 +29,8 @@ RunLog::StopReason stopReasonFor(RelayControlState next, OperatingMode mode) {
             return RunLog::StopReason::LockedCondensation;
         case RelayControlState::LockedOutSensorFault:
             return RunLog::StopReason::SensorFault;
+        case RelayControlState::LockedOutMaxRuntime:
+            return RunLog::StopReason::MaxRuntimeExceeded;
         default:
             return (mode == OperatingMode::ManualOff) ? RunLog::StopReason::ManualOff
                                                        : RunLog::StopReason::HysteresisReached;
@@ -101,6 +103,14 @@ public:
         // поэтому при неисправности считаем условие небезопасным.
         bool freezeSafe = sensorsHealthy && (outside.temperatureC > cfg.freezeProtectC);
 
+        // Аварийный потолок непрерывной работы (см. MAX_RUNTIME_MS в
+        // config.h) — независимая защита от сценариев вроде залипшего
+        // высокого показания влажности или бесконечного ручного режима ВКЛ,
+        // где обычная логика (гистерезис) никогда не попросит выключиться.
+        // maxRuntimeMs == 0 отключает проверку.
+        bool maxRuntimeExceeded = cfg.maxRuntimeMs > 0 && status_.state == RelayControlState::Running &&
+                                   (nowMs - status_.stateEnteredMs) >= cfg.maxRuntimeMs;
+
         RelayControlState next = status_.state;
 
         if (cfg.mode == OperatingMode::ManualOff) {
@@ -112,6 +122,17 @@ public:
                 next = RelayControlState::LockedOutSensorFault;
             } else if (!freezeSafe) {
                 next = RelayControlState::LockedOutFreeze;
+            } else if (maxRuntimeExceeded) {
+                next = RelayControlState::LockedOutMaxRuntime;
+            } else if (status_.state == RelayControlState::LockedOutMaxRuntime) {
+                // Только выйдя из собственной блокировки по максимальному
+                // времени ждём minPauseMs, прежде чем снова разрешить ВКЛ —
+                // иначе защита выше не имела бы смысла в ручном режиме
+                // (реле включилось бы обратно на следующем же тике). Обычное
+                // ручное включение (Idle/фрост/датчики -> ВКЛ) по-прежнему
+                // срабатывает без паузы, как и раньше.
+                bool minPauseElapsed = (nowMs - status_.lastOffMs) > cfg.minPauseMs;
+                next = minPauseElapsed ? RelayControlState::Running : RelayControlState::LockedOutMaxRuntime;
             } else {
                 // Защита от конденсата и порог влажности намеренно
                 // игнорируются в ручном режиме — пользователь явно просит
@@ -133,6 +154,8 @@ public:
                     next = RelayControlState::LockedOutFreeze;
                 } else if (!condensationSafe) {
                     next = RelayControlState::LockedOutCondensation;
+                } else if (maxRuntimeExceeded) {
+                    next = RelayControlState::LockedOutMaxRuntime;
                 } else {
                     bool minRuntimeElapsed = (nowMs - status_.stateEnteredMs) >= cfg.minRuntimeMs;
                     bool belowHysteresis = crawlRh < (cfg.rhTargetPercent - cfg.hysteresisPercent);
@@ -141,6 +164,9 @@ public:
                     }
                 }
             } else {
+                // Сюда попадаем и после обычной остановки по гистерезису, и
+                // после LockedOutMaxRuntime — в обоих случаях действует одна и
+                // та же minPauseMs, отдельного случая для max-runtime не нужно.
                 if (!freezeSafe) {
                     next = RelayControlState::LockedOutFreeze;
                 } else if (!condensationSafe) {
