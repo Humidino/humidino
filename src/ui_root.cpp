@@ -4,21 +4,19 @@
 #include <lvgl.h>
 
 #include "ui_dashboard.h"
-#include "ui_keyboard.h"
-#include "ui_presets_screen.h"
 #include "ui_settings_screen.h"
 #include "ui_stats_screen.h"
 
 namespace {
 
-enum TabIndex { kTabMain = 0, kTabSettings, kTabPresets, kTabStats, kTabCount };
+enum TabIndex { kTabMain = 0, kTabSettings, kTabStats, kTabCount };
 
 lv_obj_t* g_tabs[kTabCount];
 lv_obj_t* g_navButtons[kTabCount];
 int g_activeTab = -1;
 
-// Настройки/Пресеты — это формы редактирования, а не живая телеметрия:
-// их поля перечитываются из NVS/SharedState только при переключении на
+// Настройки — это форма редактирования, а не живая телеметрия:
+// её поля перечитываются из NVS/SharedState только при переключении на
 // вкладку (здесь), а не на каждый тик UiRoot::update() — иначе можно
 // затереть то, что пользователь ещё не успел сохранить, посреди набора
 // текста или числа.
@@ -39,9 +37,6 @@ void showTab(int idx) {
     switch (idx) {
         case kTabSettings:
             UiSettingsScreen::refresh();
-            break;
-        case kTabPresets:
-            UiPresetsScreen::refresh();
             break;
         case kTabStats:
             UiStatsScreen::refresh();
@@ -103,7 +98,6 @@ void build() {
 
     UiDashboard::build(g_tabs[kTabMain]);
     UiSettingsScreen::build(g_tabs[kTabSettings]);
-    UiPresetsScreen::build(g_tabs[kTabPresets]);
     UiStatsScreen::build(g_tabs[kTabStats]);
 
     // Нижняя панель навигации.
@@ -117,13 +111,7 @@ void build() {
 
     g_navButtons[kTabMain] = buildNavButton(navBar, "Main", kTabMain);
     g_navButtons[kTabSettings] = buildNavButton(navBar, "Settings", kTabSettings);
-    g_navButtons[kTabPresets] = buildNavButton(navBar, "Presets", kTabPresets);
     g_navButtons[kTabStats] = buildNavButton(navBar, "Stats", kTabStats);
-
-    // Клавиатура — оверлей поверх всего экрана (создана на самом scr, а не
-    // внутри конкретной вкладки), чтобы всплывать над полями ввода на
-    // "Пресетах" одной и той же клавиатурой.
-    UiKeyboard::init(scr);
 
     showTab(kTabMain);
 }

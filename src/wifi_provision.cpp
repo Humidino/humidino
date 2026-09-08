@@ -12,4 +12,9 @@ bool begin() {
     return wm.autoConnect(DEVICE_HOSTNAME);
 }
 
+void forgetCredentials() {
+    WiFiManager wm;
+    wm.resetSettings();
+}
+
 }  // namespace WifiProvision
