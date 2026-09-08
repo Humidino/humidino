@@ -79,6 +79,7 @@ public:
         pinMode(PIN_RELAY_SSR, OUTPUT);
         setRelayPin(false);
         status_ = RelayStatus{};
+        maxRuntimePauseActive_ = false;
         status_.stateEnteredMs = millis();
         status_.lastOffMs = status_.stateEnteredMs - initialMinPauseMs - 1;
         status_.cycleCount = Settings::loadCycleCount();
@@ -111,6 +112,17 @@ public:
         bool maxRuntimeExceeded = cfg.maxRuntimeMs > 0 && status_.state == RelayControlState::Running &&
                                    (nowMs - status_.stateEnteredMs) >= cfg.maxRuntimeMs;
 
+        // Состояние UI может смениться на Idle (например, после ManualOff или
+        // когда влажность уже ниже порога), но аварийная пауза после достижения
+        // max-runtime должна пережить такую смену состояния. Снимаем её только
+        // после полной minPauseMs; вычитание остаётся корректным при переполнении
+        // millis().
+        if (maxRuntimeExceeded) {
+            maxRuntimePauseActive_ = true;
+        } else if (maxRuntimePauseActive_ && (nowMs - status_.lastOffMs) >= cfg.minPauseMs) {
+            maxRuntimePauseActive_ = false;
+        }
+
         RelayControlState next = status_.state;
 
         if (cfg.mode == OperatingMode::ManualOff) {
@@ -122,17 +134,11 @@ public:
                 next = RelayControlState::LockedOutSensorFault;
             } else if (!freezeSafe) {
                 next = RelayControlState::LockedOutFreeze;
-            } else if (maxRuntimeExceeded) {
+            } else if (maxRuntimePauseActive_) {
+                // В отличие от обычной ручной остановки, паузу после достижения
+                // max-runtime нельзя обойти сменой режима или промежуточным
+                // переходом состояния в Idle.
                 next = RelayControlState::LockedOutMaxRuntime;
-            } else if (status_.state == RelayControlState::LockedOutMaxRuntime) {
-                // Только выйдя из собственной блокировки по максимальному
-                // времени ждём minPauseMs, прежде чем снова разрешить ВКЛ —
-                // иначе защита выше не имела бы смысла в ручном режиме
-                // (реле включилось бы обратно на следующем же тике). Обычное
-                // ручное включение (Idle/фрост/датчики -> ВКЛ) по-прежнему
-                // срабатывает без паузы, как и раньше.
-                bool minPauseElapsed = (nowMs - status_.lastOffMs) > cfg.minPauseMs;
-                next = minPauseElapsed ? RelayControlState::Running : RelayControlState::LockedOutMaxRuntime;
             } else {
                 // Защита от конденсата и порог влажности намеренно
                 // игнорируются в ручном режиме — пользователь явно просит
@@ -164,9 +170,9 @@ public:
                     }
                 }
             } else {
-                // Сюда попадаем и после обычной остановки по гистерезису, и
-                // после LockedOutMaxRuntime — в обоих случаях действует одна и
-                // та же minPauseMs, отдельного случая для max-runtime не нужно.
+                // Автоматический перезапуск и после гистерезиса, и после
+                // max-runtime использует одну lastOffMs-паузу. Отдельный флаг
+                // выше нужен только затем, чтобы эту паузу не обошёл ManualOn.
                 if (!freezeSafe) {
                     next = RelayControlState::LockedOutFreeze;
                 } else if (!condensationSafe) {
@@ -189,6 +195,7 @@ public:
 
 private:
     RelayStatus status_;
+    bool maxRuntimePauseActive_ = false;
 
     void transitionTo(RelayControlState next, uint32_t nowMs, const SensorReading& outside,
                        const CrawlspaceSummary& crawl, OperatingMode mode) {

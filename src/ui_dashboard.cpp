@@ -355,7 +355,7 @@ void build(lv_obj_t* parent) {
 
     // --- Баннер статуса: ВКЛ/ВЫКЛ сверху, счётчик запусков снизу ---
     g_banner = lv_obj_create(scr);
-    lv_obj_set_size(g_banner, LV_PCT(100), 64);
+    lv_obj_set_size(g_banner, LV_PCT(100), 78);
     lv_obj_set_style_pad_all(g_banner, 4, 0);
     lv_obj_clear_flag(g_banner, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(g_banner, LV_FLEX_FLOW_COLUMN);
