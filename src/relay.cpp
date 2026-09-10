@@ -89,6 +89,7 @@ public:
         const SensorReading& outside = readings[static_cast<size_t>(SensorId::Outside)];
         CrawlspaceSummary crawl = summarizeCrawlspace(readings);
         status_.crawlspaceLiveSensors = crawl.liveCount;
+        status_.crawlspaceRhPercent = crawl.maxRhPercent;
 
         // Уличный датчик не резервирован (в отличие от подпола) — его отказ
         // всегда блокирует реле целиком: без него нельзя проверить ни мороз,
@@ -213,6 +214,7 @@ private:
             status_.relayOn = shouldRun;
             if (shouldRun) {
                 status_.lastOnMs = nowMs;
+                status_.runStartCrawlRhPercent = crawl.maxRhPercent;
                 status_.cycleCount++;
                 Settings::saveCycleCount(status_.cycleCount);
                 RunLog::recordStart(crawl.maxRhPercent, crawl.avgTempC, outside.humidityPct, outside.temperatureC);

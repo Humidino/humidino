@@ -128,10 +128,11 @@ def fake_zone(base_temp, base_rh, with_dew, error=False):
 
 
 _relay_on_since = None  # эпоха, с которой реле непрерывно "включено" в моке — для relay.runtime_s
+_relay_start_rh = None  # влажность подпола (макс. по живым зонам) на момент этого включения — для relay.run_start_rh
 
 
 def build_state():
-    global _relay_on_since, last_relay_running, mock_cycle_count
+    global _relay_on_since, _relay_start_rh, last_relay_running, mock_cycle_count
     elapsed = time.time() - START_TIME
     state_str = RELAY_STATE_CYCLE[int(elapsed // STATE_HOLD_SECONDS) % len(RELAY_STATE_CYCLE)]
     if settings["mode"] == "manual_off" and state_str not in ("locked_freeze", "locked_sensor_fault", "locked_max_runtime"):
@@ -146,19 +147,34 @@ def build_state():
         cycle_count = mock_cycle_count
     wobble = math.sin(elapsed / 5.0) * 3
 
-    relay_on = state_str == "running"
-    now = time.time()
-    if relay_on and _relay_on_since is None:
-        _relay_on_since = now
-    elif not relay_on:
-        _relay_on_since = None
-    runtime_s = int(now - _relay_on_since) if relay_on else 0
-
     # Зона 1 периодически "отваливается" (как раньше) — демонстрирует
     # деградированный режим (2 из 3 живых), а не полную блокировку, раз
     # остальные две зоны подпола остаются исправны.
     zone1_error = int(elapsed) % 30 < 3
     crawl_live = 3 - (1 if zone1_error else 0)
+
+    zones = {
+        "crawl_intake": fake_zone(18 + wobble * 0.2, 74, True, error=zone1_error),
+        "crawl_mid": fake_zone(17.5 + wobble * 0.2, 71, True),
+        "crawl_far": fake_zone(17 + wobble * 0.2, 69, True),
+        "outside": fake_zone(9 + wobble, 55, False),
+    }
+    # Тот же агрегат, что и relay.crawlspaceRhPercent на устройстве (макс.
+    # rh_pct среди живых зон подпола) — используется веб-интерфейсом вместе с
+    # run_start_rh, чтобы показать изменение влажности с начала запуска.
+    crawl_now = max(
+        (z["rh_pct"] for k, z in zones.items() if k != "outside" and not z["error"]), default=None
+    )
+
+    relay_on = state_str == "running"
+    now = time.time()
+    if relay_on and _relay_on_since is None:
+        _relay_on_since = now
+        _relay_start_rh = crawl_now
+    elif not relay_on:
+        _relay_on_since = None
+        _relay_start_rh = None
+    runtime_s = int(now - _relay_on_since) if relay_on else 0
 
     return {
         "demo": True,
@@ -171,18 +187,14 @@ def build_state():
             "state_str": state_str,
             "runtime_s": runtime_s,
             "cycle_count": cycle_count,
+            "run_start_rh": _relay_start_rh,
         },
         "crawlspace": {
             "live_sensors": crawl_live,
             "total_sensors": 3,
             "degraded": crawl_live < 3,
         },
-        "zones": {
-            "crawl_intake": fake_zone(18 + wobble * 0.2, 74, True, error=(int(elapsed) % 30 < 3)),
-            "crawl_mid": fake_zone(17.5 + wobble * 0.2, 71, True),
-            "crawl_far": fake_zone(17 + wobble * 0.2, 69, True),
-            "outside": fake_zone(9 + wobble, 55, False),
-        },
+        "zones": zones,
     }
 
 

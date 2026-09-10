@@ -57,6 +57,7 @@
   let lastRuntimeFetchMs = 0; // клиентское время этого опроса — от него тикает секундомер между опросами
   let wasRunning = false;
   let lastSettings = null; // последние настройки, полученные от устройства
+  let lastHumidityDropText = ""; // "· влажность -2.3 п.п." для текущего запуска, обновляется раз в опрос, не тикает
 
   function setControlsEnabled(enabled) {
     document.querySelectorAll(".mode-switch button").forEach((btn) => {
@@ -184,14 +185,26 @@
       dot.className = "dot online";
       health.textContent = "Все датчики в норме";
     }
+
+    return bestHealthyRh;
   }
 
-  function renderRunTimer(relayOn, runtimeS, cycleCount) {
+  // runStartRh — влажность подпола (тот же агрегат, что и bestHealthyRh) в
+  // момент включения реле в текущем запуске (relay.run_start_rh с
+  // устройства); currentRh — её же текущее значение. Разница показывает,
+  // насколько влажность изменилась с начала запуска, а не просто что
+  // вентилятор работает N минут.
+  function renderRunTimer(relayOn, runtimeS, cycleCount, runStartRh, currentRh) {
     if (relayOn) {
       lastRuntimeS = runtimeS || 0;
       lastRuntimeFetchMs = Date.now();
-      qs("runTimer").textContent = "Работает " + fmtRunClock(lastRuntimeS * 1000);
+      lastHumidityDropText =
+        typeof runStartRh === "number" && typeof currentRh === "number"
+          ? ` · влажность ${(currentRh - runStartRh >= 0 ? "+" : "") + (currentRh - runStartRh).toFixed(1)} п.п.`
+          : "";
+      qs("runTimer").textContent = "Работает " + fmtRunClock(lastRuntimeS * 1000) + lastHumidityDropText;
     } else {
+      lastHumidityDropText = "";
       qs("runTimer").textContent = cycleCount !== undefined ? `Циклов всего: ${cycleCount}` : "—";
     }
   }
@@ -207,13 +220,19 @@
     qs("relayActual").textContent = relayOn ? "РЕЛЕ: ВКЛЮЧЕНО" : "РЕЛЕ: ВЫКЛЮЧЕНО";
     qs("bannerLabel").textContent = BANNER_LABEL[stateKey] || stateKey;
     qs("statusExplanation").textContent = BANNER_EXPLANATION[stateKey] || "";
-    renderRunTimer(relayOn, s.relay && s.relay.runtime_s, s.relay && s.relay.cycle_count);
+
+    const currentRh = s.zones ? renderZones(s.zones) : null;
+    renderRunTimer(
+      relayOn,
+      s.relay && s.relay.runtime_s,
+      s.relay && s.relay.cycle_count,
+      s.relay ? s.relay.run_start_rh : null,
+      currentRh,
+    );
 
     const fan = qs("fanIcon");
     fan.classList.toggle("spinning", relayOn);
     wasRunning = relayOn;
-
-    if (s.zones) renderZones(s.zones);
 
     qs("deviceUptime").textContent = s.uptime_s !== undefined ? fmtUptime(s.uptime_s) : "—";
     qs("deviceWifi").textContent = fmtWifi(s.wifi_rssi);
@@ -237,7 +256,7 @@
   setInterval(() => {
     if (wasRunning) {
       const elapsedMs = lastRuntimeS * 1000 + (Date.now() - lastRuntimeFetchMs);
-      qs("runTimer").textContent = "Работает " + fmtRunClock(elapsedMs);
+      qs("runTimer").textContent = "Работает " + fmtRunClock(elapsedMs) + lastHumidityDropText;
     }
   }, 1000);
 
