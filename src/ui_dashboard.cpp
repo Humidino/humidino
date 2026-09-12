@@ -1,6 +1,7 @@
 #include "ui_dashboard.h"
 
 #include <Arduino.h>
+#include <cmath>
 #include <cstring>
 #include <esp_heap_caps.h>
 #include <lvgl.h>
@@ -409,7 +410,7 @@ void update() {
         updateZonePanel(g_panels[i], snapshot.readings[i]);
     }
 
-    char buf[48];
+    char buf[64];
     formatUptime(buf, sizeof(buf), millis());
     setLabelTextIfChanged(g_uptimeLabel, buf);
 
@@ -447,6 +448,19 @@ void update() {
     if (snapshot.relay.relayOn) {
         lv_obj_clear_flag(g_spinner, LV_OBJ_FLAG_HIDDEN);
         formatRuntime(buf, sizeof(buf), millis() - snapshot.relay.lastOnMs);
+
+        // Насколько влажность подпола изменилась с начала текущего запуска —
+        // тот же агрегат (максимум по живым датчикам), что и в пороговых
+        // решениях (relay.cpp::summarizeCrawlspace). Отсутствует, пока не
+        // накопилась хотя бы пара опросов после включения реле.
+        float start = snapshot.relay.runStartCrawlRhPercent;
+        float now = snapshot.relay.crawlspaceRhPercent;
+        if (!std::isnan(start) && !std::isnan(now)) {
+            char humBuf[28];
+            snprintf(humBuf, sizeof(humBuf), "  Влажность: %+.1f%%", now - start);
+            strncat(buf, humBuf, sizeof(buf) - std::strlen(buf) - 1);
+        }
+
         setLabelTextIfChanged(g_runtimeLabel, buf);
         lv_obj_clear_flag(g_runtimeLabel, LV_OBJ_FLAG_HIDDEN);
     } else {

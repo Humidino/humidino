@@ -30,6 +30,12 @@ void buildStateJson(JsonDocument& doc) {
     relay["cycle_count"] = s.relay.cycleCount;               // сколько раз включалось за всё время (переживает перезагрузки)
     // Сколько секунд длится текущий цикл работы, 0 — если сейчас выключено.
     relay["runtime_s"] = s.relay.relayOn ? (millis() - s.relay.lastOnMs) / 1000 : 0;
+    // Влажность подпола (агрегат по живым датчикам, см. shared_state.h) в
+    // момент, когда реле включилось в текущем цикле — вместе с rh_pct зон
+    // подпола позволяет веб-интерфейсу показать, насколько влажность упала
+    // с начала текущего запуска. null, если реле ни разу не включалось.
+    if (isnan(s.relay.runStartCrawlRhPercent)) relay["run_start_rh"] = nullptr;
+    else relay["run_start_rh"] = s.relay.runStartCrawlRhPercent;
 
     static const char* kKeys[] = {"crawl_intake", "crawl_mid", "crawl_far", "outside"};
     JsonObject zones = doc["zones"].to<JsonObject>();
