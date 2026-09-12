@@ -88,11 +88,17 @@ void updateSettings(const RuntimeSettings& settings) {
     xSemaphoreGive(g_mutex);
 }
 
-void updateWifi(bool connected, int8_t rssi) {
+void updateWifi(bool connected, int8_t rssi, const char* ip) {
     if (g_mutex == nullptr) return;
     if (xSemaphoreTake(g_mutex, kLockTimeout) != pdTRUE) return;
     g_state.wifiConnected = connected;
     g_state.wifiRssi = rssi;
+    if (ip != nullptr) {
+        strncpy(g_state.wifiIp, ip, sizeof(g_state.wifiIp) - 1);
+        g_state.wifiIp[sizeof(g_state.wifiIp) - 1] = '\0';
+    } else {
+        g_state.wifiIp[0] = '\0';
+    }
     xSemaphoreGive(g_mutex);
 }
 

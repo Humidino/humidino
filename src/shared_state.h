@@ -104,6 +104,10 @@ struct SystemState {
     RuntimeSettings settings;
     bool wifiConnected = false;
     int8_t wifiRssi = 0;
+    // Локальный IPv4, полученный по DHCP от точки доступа; пустая строка,
+    // пока нет подключения. Показывается на дашборде, чтобы можно было
+    // открыть локальный веб-интерфейс, не заходя в роутер за списком клиентов.
+    char wifiIp[16] = "";
 };
 
 // Доступ под мьютексом. Каждый вызов берёт блокировку с коротким таймаутом,
@@ -120,7 +124,9 @@ bool getSnapshot(SystemState& out);
 void updateSensor(SensorId id, const SensorReading& reading);
 void updateRelay(const RelayStatus& status);
 void updateSettings(const RuntimeSettings& settings);
-void updateWifi(bool connected, int8_t rssi);
+// ip — локальный IPv4 в виде строки ("192.168.1.23") или nullptr/"", если
+// подключения нет.
+void updateWifi(bool connected, int8_t rssi, const char* ip = nullptr);
 
 // Вспомогательная функция для вызывающих, которым нужно только одно поле —
 // не копирует всю структуру целиком.
