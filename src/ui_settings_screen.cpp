@@ -4,10 +4,14 @@
 #include <cmath>
 #include <cstdlib>
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
 #include "fonts/fonts.h"
 #include "season.h"
 #include "settings_actions.h"
 #include "shared_state.h"
+#include "wifi_provision.h"
 
 namespace {
 
@@ -44,6 +48,16 @@ lv_obj_t* g_seasonAutoSwitch;
 lv_obj_t* g_seasonNowLabel;
 lv_obj_t* g_savedFlash;
 lv_timer_t* g_flashTimer = nullptr;
+
+lv_obj_t* g_wifiInfoLabel;
+lv_obj_t* g_wifiResetBtn;
+lv_obj_t* g_wifiResetLabel;
+// Кнопка сброса Wi-Fi требует двух нажатий подряд (первое переводит её в
+// режим подтверждения, второе — необратимо стирает credentials и
+// перезагружает устройство), чтобы случайное касание не оборвало связь с
+// точкой доступа без возможности отменить действие на самом дисплее.
+bool g_wifiResetConfirmPending = false;
+lv_timer_t* g_wifiResetConfirmTimer = nullptr;
 
 const char* seasonRuName(Season::Id season) {
     switch (season) {
@@ -155,6 +169,45 @@ void buildRow(lv_obj_t* parent, RowIndex idx, const char* labelText, int32_t ran
     lv_obj_add_event_cb(plusBtn, onIncrementClicked, LV_EVENT_LONG_PRESSED_REPEAT, userData);
 }
 
+void cancelWifiResetConfirm(lv_timer_t*) {
+    g_wifiResetConfirmPending = false;
+    lv_label_set_text(g_wifiResetLabel, "Сбросить Wi-Fi");
+    g_wifiResetConfirmTimer = nullptr;
+}
+
+// Стирает сохранённые Wi-Fi credentials и перезагружает устройство — то же
+// самое действие, что POST /api/wifi/reset в web_server.cpp. Задержка перед
+// forgetCredentials()/ESP.restart() нужна, чтобы LVGL успел отрисовать
+// последний кадр ("Сброс...") на экране до перезагрузки.
+void performWifiReset() {
+    xTaskCreate(
+        [](void*) {
+            vTaskDelay(pdMS_TO_TICKS(300));
+            WifiProvision::forgetCredentials();
+            ESP.restart();
+        },
+        "wifiForgetUi", 4096, nullptr, 1, nullptr);
+}
+
+void onWifiResetClicked(lv_event_t*) {
+    if (!g_wifiResetConfirmPending) {
+        g_wifiResetConfirmPending = true;
+        lv_label_set_text(g_wifiResetLabel, "Точно? Нажмите ещё раз");
+        if (g_wifiResetConfirmTimer != nullptr) lv_timer_reset(g_wifiResetConfirmTimer);
+        else g_wifiResetConfirmTimer = lv_timer_create(cancelWifiResetConfirm, 4000, nullptr);
+        lv_timer_set_repeat_count(g_wifiResetConfirmTimer, 1);
+        return;
+    }
+
+    if (g_wifiResetConfirmTimer != nullptr) {
+        lv_timer_delete(g_wifiResetConfirmTimer);
+        g_wifiResetConfirmTimer = nullptr;
+    }
+    g_wifiResetConfirmPending = false;
+    lv_label_set_text(g_wifiResetLabel, "Сброс...");
+    performWifiReset();
+}
+
 void onSaveClicked(lv_event_t*) {
     RuntimeSettings previous = ShaState::getSettings();  // сохраняем текущий mode как есть
     RuntimeSettings settings = previous;
@@ -229,6 +282,40 @@ void build(lv_obj_t* parent) {
 
     g_seasonAutoSwitch = lv_switch_create(seasonRow);
 
+    // --- Wi-Fi: текущий IP/уровень сигнала + сброс сохранённых credentials ---
+    lv_obj_t* wifiRow = lv_obj_create(parent);
+    lv_obj_set_size(wifiRow, LV_PCT(100), 40);
+    lv_obj_set_flex_flow(wifiRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(wifiRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_border_width(wifiRow, 0, 0);
+    lv_obj_set_style_pad_all(wifiRow, 2, 0);
+
+    lv_obj_t* wifiLbl = lv_label_create(wifiRow);
+    lv_obj_set_style_text_font(wifiLbl, &font_ru_14, 0);
+    lv_label_set_text(wifiLbl, "Wi-Fi");
+    lv_obj_set_flex_grow(wifiLbl, 1);
+
+    g_wifiInfoLabel = lv_label_create(wifiRow);
+    lv_obj_set_style_text_font(g_wifiInfoLabel, &font_ru_14, 0);
+    lv_obj_set_style_text_color(g_wifiInfoLabel, lv_color_hex(0x8AA0B8), 0);
+    lv_label_set_text(g_wifiInfoLabel, "");
+
+    lv_obj_t* wifiResetRow = lv_obj_create(parent);
+    lv_obj_set_size(wifiResetRow, LV_PCT(100), 40);
+    lv_obj_set_flex_flow(wifiResetRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(wifiResetRow, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_border_width(wifiResetRow, 0, 0);
+    lv_obj_set_style_pad_all(wifiResetRow, 2, 0);
+    lv_obj_clear_flag(wifiResetRow, LV_OBJ_FLAG_SCROLLABLE);
+
+    g_wifiResetBtn = lv_button_create(wifiResetRow);
+    lv_obj_set_style_bg_color(g_wifiResetBtn, lv_color_hex(0x7A2E2E), 0);
+    lv_obj_add_event_cb(g_wifiResetBtn, onWifiResetClicked, LV_EVENT_CLICKED, nullptr);
+    g_wifiResetLabel = lv_label_create(g_wifiResetBtn);
+    lv_obj_set_style_text_font(g_wifiResetLabel, &font_ru_14, 0);
+    lv_label_set_text(g_wifiResetLabel, "Сбросить Wi-Fi");
+    lv_obj_center(g_wifiResetLabel);
+
     lv_obj_t* footer = lv_obj_create(parent);
     lv_obj_set_size(footer, LV_PCT(100), 44);
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
@@ -270,6 +357,25 @@ void refresh() {
     char seasonBuf[24];
     snprintf(seasonBuf, sizeof(seasonBuf), "сейчас: %s", seasonRuName(Season::current()));
     lv_label_set_text(g_seasonNowLabel, seasonBuf);
+
+    SystemState snapshot;
+    if (ShaState::getSnapshot(snapshot) && snapshot.wifiConnected) {
+        char wifiBuf[40];
+        snprintf(wifiBuf, sizeof(wifiBuf), "%s (%d дБм)", snapshot.wifiIp, snapshot.wifiRssi);
+        lv_label_set_text(g_wifiInfoLabel, wifiBuf);
+    } else {
+        lv_label_set_text(g_wifiInfoLabel, "не подключено");
+    }
+
+    // Открыли вкладку заново, пока висело подтверждение сброса — сбрасываем
+    // его, чтобы случайный повторный тап на другой вкладке не воспринимался
+    // как второе нажатие "Сбросить Wi-Fi".
+    if (g_wifiResetConfirmTimer != nullptr) {
+        lv_timer_delete(g_wifiResetConfirmTimer);
+        g_wifiResetConfirmTimer = nullptr;
+    }
+    g_wifiResetConfirmPending = false;
+    lv_label_set_text(g_wifiResetLabel, "Сбросить Wi-Fi");
 }
 
 }  // namespace UiSettingsScreen
