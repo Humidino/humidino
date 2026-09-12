@@ -456,7 +456,7 @@ void update() {
         float start = snapshot.relay.runStartCrawlRhPercent;
         float now = snapshot.relay.crawlspaceRhPercent;
         if (!std::isnan(start) && !std::isnan(now)) {
-            char humBuf[24];
+            char humBuf[28];
             snprintf(humBuf, sizeof(humBuf), "  Влажность: %+.1f%%", now - start);
             strncat(buf, humBuf, sizeof(buf) - std::strlen(buf) - 1);
         }
