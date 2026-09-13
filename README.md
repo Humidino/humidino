@@ -73,7 +73,7 @@ pio run -e esp32-s3-devkitc-1 -t upload --upload-port COM5
 Файл [data/index.html](data/index.html) — это страница локального веб-интерфейса. Она **не** зашивается вместе с основной прошивкой, а заливается отдельно на раздел LittleFS:
 
 ```bash
-pio run -e esp32-s3-devkitc-1 -t uploadfs
+python -m platformio run -e esp32-s3-devkitc-1 -t uploadfs
 ```
 
 Без этого шага веб-сервер на устройстве будет отвечать на `/api/state` и `/api/settings`, но по адресу `/` вернёт пустоту — страницы не будет.
