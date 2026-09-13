@@ -69,7 +69,14 @@
 
 #if LV_USE_STDLIB_MALLOC == LV_STDLIB_BUILTIN
     /** Size of memory available for `lv_malloc()` in bytes (>= 2kB) */
-    #define LV_MEM_SIZE (48 * 1024U)          /**< [bytes] */
+    // Было 48 КБ — этого едва хватало на 4 вкладки (см. комментарий в
+    // ui_stats_screen.cpp), а добавление переключателя и двух степперов
+    // "тихих часов" на экран настроек (ещё ~19 LVGL-объектов, они не
+    // уничтожаются при переключении вкладок) исчерпало оставшийся запас:
+    // lv_malloc() начал падать, LV_ASSERT_HANDLER (while(1);, без подкормки
+    // watchdog) вешал lvglTask, а через WDT_TIMEOUT_S watchdog перезагружал
+    // весь чип — цикл повторялся на том же месте при каждой загрузке.
+    #define LV_MEM_SIZE (64 * 1024U)          /**< [bytes] */
 
     /** Size of the memory expand for `lv_malloc()` in bytes */
     #define LV_MEM_POOL_EXPAND_SIZE 0
