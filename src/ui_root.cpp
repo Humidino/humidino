@@ -22,6 +22,8 @@ int g_activeTab = -1;
 // текста или числа.
 void showTab(int idx) {
     if (idx == g_activeTab) return;
+
+    if (g_activeTab == kTabSettings) UiSettingsScreen::cancelWifiResetConfirm();
     g_activeTab = idx;
 
     for (int i = 0; i < kTabCount; i++) {

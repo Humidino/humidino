@@ -170,9 +170,9 @@ void buildRow(lv_obj_t* parent, RowIndex idx, const char* labelText, int32_t ran
 }
 
 void cancelWifiResetConfirm(lv_timer_t*) {
-    g_wifiResetConfirmPending = false;
-    lv_label_set_text(g_wifiResetLabel, "Сбросить Wi-Fi");
+    // Одноразовый таймер уже будет удалён LVGL после колбэка.
     g_wifiResetConfirmTimer = nullptr;
+    UiSettingsScreen::cancelWifiResetConfirm();
 }
 
 // Стирает сохранённые Wi-Fi credentials и перезагружает устройство — то же
@@ -367,9 +367,9 @@ void refresh() {
         lv_label_set_text(g_wifiInfoLabel, "не подключено");
     }
 
-    // Открыли вкладку заново, пока висело подтверждение сброса — сбрасываем
-    // его, чтобы случайный повторный тап на другой вкладке не воспринимался
-    // как второе нажатие "Сбросить Wi-Fi".
+}
+
+void cancelWifiResetConfirm() {
     if (g_wifiResetConfirmTimer != nullptr) {
         lv_timer_delete(g_wifiResetConfirmTimer);
         g_wifiResetConfirmTimer = nullptr;
