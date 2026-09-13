@@ -40,6 +40,14 @@ void loadWebPassword() {
     Serial.printf("Web login: %s / %s\n", DEVICE_HOSTNAME, g_webPassword);
 }
 
+// Значение из JSON-запроса может быть каким угодно (клиент/curl) — часы
+// "тихого" окна всегда должны оставаться в допустимом диапазоне 0-23.
+uint8_t clampHour(int value) {
+    if (value < 0) return 0;
+    if (value > 23) return 23;
+    return static_cast<uint8_t>(value);
+}
+
 void writePresetsJson(JsonDocument& doc, const std::vector<Settings::Preset>& presets) {
     JsonArray arr = doc.to<JsonArray>();
     for (const auto& preset : presets) {
@@ -119,6 +127,11 @@ void begin() {
             if (body["min_runtime_ms"].is<uint32_t>()) settings.minRuntimeMs = body["min_runtime_ms"];
             if (body["min_pause_ms"].is<uint32_t>()) settings.minPauseMs = body["min_pause_ms"];
             if (body["max_runtime_ms"].is<uint32_t>()) settings.maxRuntimeMs = body["max_runtime_ms"];
+            if (body["quiet_hours_enabled"].is<bool>()) settings.quietHoursEnabled = body["quiet_hours_enabled"];
+            if (body["quiet_hours_start"].is<int>())
+                settings.quietHoursStartHour = clampHour((int)body["quiet_hours_start"]);
+            if (body["quiet_hours_end"].is<int>())
+                settings.quietHoursEndHour = clampHour((int)body["quiet_hours_end"]);
             if (body["mode"].is<const char*>()) settings.mode = operatingModeFromString(body["mode"]);
             if (body["season_auto"].is<bool>()) settings.seasonAutoEnabled = body["season_auto"];
 

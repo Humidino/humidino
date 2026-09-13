@@ -1,6 +1,7 @@
 #include "relay.h"
 
 #include <Arduino.h>
+#include <ctime>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -8,6 +9,7 @@
 #include "config.h"
 #include "run_log.h"
 #include "settings_store.h"
+#include "time_sync.h"
 #include "watchdog.h"
 
 namespace {
@@ -31,6 +33,8 @@ RunLog::StopReason stopReasonFor(RelayControlState next, OperatingMode mode) {
             return RunLog::StopReason::SensorFault;
         case RelayControlState::LockedOutMaxRuntime:
             return RunLog::StopReason::MaxRuntimeExceeded;
+        case RelayControlState::LockedOutQuietHours:
+            return RunLog::StopReason::QuietHours;
         default:
             return (mode == OperatingMode::ManualOff) ? RunLog::StopReason::ManualOff
                                                        : RunLog::StopReason::HysteresisReached;
@@ -71,6 +75,33 @@ CrawlspaceSummary summarizeCrawlspace(const SensorReading readings[static_cast<s
     }
     if (s.anyLive) s.avgTempC = tempSum / s.liveCount;
     return s;
+}
+
+// Час (0-23) внутри окна "тихих часов" [startHour, endHour)? Отдельная чистая
+// функция от isWithinQuietHours() ниже — тестируется на хостовых сборках без
+// реального времени/NTP (см. tests/host/main.cpp). startHour == endHour
+// трактуется как пустое окно (тихие часы фактически выключены), а не как
+// "все 24 часа" — иначе включение с одинаковыми полями молча блокировало бы
+// реле навсегда.
+bool isHourInQuietWindow(int hour, uint8_t startHour, uint8_t endHour) {
+    if (startHour == endHour) return false;
+    if (startHour < endHour) return hour >= startHour && hour < endHour;
+    return hour >= startHour || hour < endHour;  // окно переходит через полночь
+}
+
+// Тихие часы по расписанию — независимая от датчиков блокировка (см.
+// RuntimeSettings::quietHoursEnabled в shared_state.h). Без NTP-синхронизации
+// (time_sync.h) не можем узнать текущий локальный час — в этом случае не
+// блокируем совсем, а не блокируем "по умолчанию": лучше лишний цикл
+// осушения, чем вентилятор, который перестаёт запускаться навсегда из-за
+// отсутствия интернета.
+bool isWithinQuietHours(const RuntimeSettings& cfg) {
+    if (!cfg.quietHoursEnabled) return false;
+    if (!TimeSync::isSynced()) return false;
+    time_t localT = static_cast<time_t>(TimeSync::nowEpoch()) + LOCAL_TZ_OFFSET_SEC;
+    struct tm tmResult{};
+    gmtime_r(&localT, &tmResult);
+    return isHourInQuietWindow(tmResult.tm_hour, cfg.quietHoursStartHour, cfg.quietHoursEndHour);
 }
 
 class RelayController {
@@ -154,16 +185,23 @@ public:
         } else {
             float crawlRh = crawl.maxRhPercent;
             bool condensationSafe = outside.absHumidityGm3 < crawl.minAbsHumidityGm3;
+            bool quietHours = isWithinQuietHours(cfg);
 
             if (status_.state == RelayControlState::Running) {
                 // Отключения по физической защите немедленно перекрывают
                 // минимальное время работы — оно защищает реле только от износа
                 // при частых включениях/выключениях и не является блокировкой
-                // по безопасности.
+                // по безопасности. Тихие часы — не физическая защита, а
+                // расписание по просьбе пользователя, но останавливаем реле
+                // так же немедленно: раз пользователь задал именно эти часы
+                // как тихие, дожидаться minRuntimeMs означало бы шуметь в
+                // заведомо нежелательное время.
                 if (!freezeSafe) {
                     next = RelayControlState::LockedOutFreeze;
                 } else if (!condensationSafe) {
                     next = RelayControlState::LockedOutCondensation;
+                } else if (quietHours) {
+                    next = RelayControlState::LockedOutQuietHours;
                 } else if (maxRuntimeExceeded) {
                     next = RelayControlState::LockedOutMaxRuntime;
                 } else {
@@ -181,6 +219,10 @@ public:
                     next = RelayControlState::LockedOutFreeze;
                 } else if (!condensationSafe) {
                     next = RelayControlState::LockedOutCondensation;
+                } else if (quietHours) {
+                    // Не даём даже запуститься, пока идут тихие часы —
+                    // независимо от того, насколько превышен порог влажности.
+                    next = RelayControlState::LockedOutQuietHours;
                 } else if (crawlRh > cfg.rhTargetPercent) {
                     bool minPauseElapsed = (nowMs - status_.lastOffMs) > cfg.minPauseMs;
                     next = minPauseElapsed ? RelayControlState::Running : RelayControlState::MinPauseHold;

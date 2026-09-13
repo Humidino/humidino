@@ -29,7 +29,9 @@ enum class RelayControlState : uint8_t {
     LockedOutSensorFault,
     // Добавлено в конец — значение используется как числовой код в JSON-API
     // (см. Telemetry::buildStateJson), существующие коды менять нельзя.
-    LockedOutMaxRuntime
+    LockedOutMaxRuntime,
+    // Тоже добавлено в конец, по той же причине.
+    LockedOutQuietHours
 };
 
 // Режим управления вентиляцией, выбирается пользователем (веб-интерфейс —
@@ -88,6 +90,19 @@ struct RuntimeSettings {
     // (season.cpp, PresetValues) — это не порог осушения, а независимая
     // защита, которая не должна меняться при смене сезона или пресета.
     uint32_t maxRuntimeMs = MAX_RUNTIME_MS;
+    // "Тихие часы" — принудительная пауза по расписанию (например, ночью),
+    // независимая от влажности. Действует только в Auto — ManualOn её
+    // игнорирует, как и порог влажности/конденсат/минимальную паузу (см.
+    // relay.cpp). Требует синхронизированного по NTP времени (time_sync.h) —
+    // без него не блокирует ничего, см. isWithinQuietHours() в relay.cpp.
+    // Окно [quietHoursStartHour, quietHoursEndHour) в локальных часах,
+    // поддерживает переход через полночь (start > end); start == end
+    // трактуется как пустое окно (не блокирует). Сознательно не входит ни в
+    // пресеты, ни в сезонные профили — это фиксированное по времени суток
+    // расписание, а не порог осушения.
+    bool quietHoursEnabled = DEFAULT_QUIET_HOURS_ENABLED;
+    uint8_t quietHoursStartHour = DEFAULT_QUIET_HOURS_START_HOUR;
+    uint8_t quietHoursEndHour = DEFAULT_QUIET_HOURS_END_HOUR;
     OperatingMode mode = OperatingMode::Auto;
     // Если true — фоновая задача Season (см. season.h) сама подставляет сюда
     // пороги/тайминги текущего календарного сезона (профили подобраны под

@@ -31,6 +31,12 @@ namespace RunLog {
 void recordStart(float, float, float, float) {}
 void recordStop(float, float, float, float, StopReason, uint32_t) {}
 }
+bool testTimeSynced = false;
+uint32_t testEpoch = 0;
+namespace TimeSync {
+bool isSynced() { return testTimeSynced; }
+uint32_t nowEpoch() { return testEpoch; }
+}
 
 void check(bool condition, const char* description) {
     if (!condition) { std::cerr << "FAIL: " << description << '\n'; std::exit(1); }
@@ -128,6 +134,58 @@ int main() {
     check(!lockoutController.status().relayOn, "manual on cannot bypass max-runtime pause after auto idle");
     evaluateLockout(1000);
     check(lockoutController.status().relayOn, "manual on starts when max-runtime pause expires");
+
+    check(isHourInQuietWindow(23, 22, 7), "quiet window wraps midnight: 23:00 is inside");
+    check(isHourInQuietWindow(3, 22, 7), "quiet window wraps midnight: 03:00 is inside");
+    check(isHourInQuietWindow(22, 22, 7), "quiet window start hour is inclusive");
+    check(!isHourInQuietWindow(7, 22, 7), "quiet window end hour is exclusive");
+    check(!isHourInQuietWindow(12, 22, 7), "midday is outside a wrapping night window");
+    check(isHourInQuietWindow(10, 9, 17), "non-wrapping window contains an hour inside it");
+    check(!isHourInQuietWindow(20, 9, 17), "non-wrapping window excludes an hour outside it");
+    check(!isHourInQuietWindow(5, 5, 5), "equal start/end hour means the window is empty");
+
+    healthyReadings();
+    RuntimeSettings quietSettings = testState.settings;
+    quietSettings.mode = OperatingMode::Auto;
+    quietSettings.quietHoursEnabled = true;
+    quietSettings.quietHoursStartHour = 22;
+    quietSettings.quietHoursEndHour = 7;
+    RelayController quietController;
+    quietController.begin(quietSettings.minPauseMs);
+    auto evaluateQuiet = [&](uint32_t advanceMs) {
+        testNow += advanceMs;
+        quietController.update(testState.readings, quietSettings, testNow);
+    };
+
+    testTimeSynced = true;
+    testEpoch = 0;  // UTC epoch 0 -> локально (UTC+3) 03:00, внутри окна 22-7
+    evaluateQuiet(1000);
+    check(quietController.status().state == RelayControlState::LockedOutQuietHours &&
+              !quietController.status().relayOn,
+          "auto mode refuses to start during quiet hours even above humidity target");
+
+    testEpoch = 32400;  // локально 12:00, вне окна 22-7
+    evaluateQuiet(1000);
+    check(quietController.status().relayOn, "auto mode starts once quiet hours end");
+
+    testEpoch = 0;  // снова 03:00 локально, внутри окна
+    evaluateQuiet(1000);
+    check(quietController.status().state == RelayControlState::LockedOutQuietHours &&
+              !quietController.status().relayOn,
+          "quiet hours stop a running cycle immediately, bypassing minimum runtime");
+
+    quietSettings.mode = OperatingMode::ManualOn;
+    evaluateQuiet(1000);
+    check(quietController.status().relayOn, "manual on ignores quiet hours, same as humidity/condensation/pause");
+
+    testTimeSynced = false;
+    quietSettings.mode = OperatingMode::Auto;
+    RelayController unsyncedController;
+    unsyncedController.begin(quietSettings.minPauseMs);
+    testNow += 1000;
+    unsyncedController.update(testState.readings, quietSettings, testNow);
+    check(unsyncedController.status().relayOn,
+          "quiet hours have no effect at all without NTP time sync (fail-open, not fail-closed)");
 
     lv_init();
     lv_display_t* display = lv_display_create(480, 320);
