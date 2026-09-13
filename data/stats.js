@@ -39,6 +39,23 @@
   let allRecords = []; // записи, загруженные для текущего периода (от новой к старой)
   let visibleRows = ROWS_PAGE;
 
+  // --- Текущие дата и время (браузера, не устройства) ---
+
+  function updateCurrentDateTime() {
+    const now = new Date().toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    qs("currentDateTime").textContent = `Текущие дата и время: ${now}`;
+  }
+
+  updateCurrentDateTime();
+  setInterval(updateCurrentDateTime, 1000);
+
   function fmtDurationSec(sec) {
     if (!sec && sec !== 0) return "—";
     const m = Math.round(sec / 60);

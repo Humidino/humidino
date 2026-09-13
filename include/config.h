@@ -116,7 +116,17 @@ constexpr bool    DEFAULT_QUIET_HOURS_ENABLED    = false;
 constexpr uint8_t DEFAULT_QUIET_HOURS_START_HOUR = 22;  // 22:00
 constexpr uint8_t DEFAULT_QUIET_HOURS_END_HOUR   = 7;   // 07:00
 
-constexpr uint32_t WDT_TIMEOUT_S            = 8;  // с — таймаут аппаратного watchdog
+// Было 8 с — по логу с реального устройства watchdog паниковал (весь чип
+// перезагружался) именно во время блокирующего captive-portal у WifiManager
+// (WifiProvision::begin(), network.cpp), когда сохранённая Wi-Fi сеть не
+// видна (NO_AP_FOUND) и устройство поднимает точку доступа "humidino": на
+// это время netTask снят с watchdog (регистрируется только после успешного
+// подключения), но какая-то из уже зарегистрированных задач (lvglTask/
+// sensorTask/controlTask) не успевала покормить свой watchdog за 8 с, пока
+// Wi-Fi-драйвер был занят рассылкой beacon-кадров в режиме AP. Запас увеличен
+// с большим отрывом, а не впритык, — точную задачу-виновника без полного
+// лога ("Task watchdog got triggered...") установить не удалось.
+constexpr uint32_t WDT_TIMEOUT_S            = 20;  // с — таймаут аппаратного watchdog
 
 constexpr uint32_t BACKLIGHT_DIM_TIMEOUT_MS = 5UL * 60 * 1000;  // 5 мин бездействия до гашения
 constexpr uint32_t BACKLIGHT_FADE_MS        = 1500;  // 1500 мс = 1,5 с — длительность плавного гашения
