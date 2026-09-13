@@ -66,7 +66,7 @@ void writePresetsJson(JsonDocument& doc, const std::vector<Settings::Preset>& pr
 namespace LocalWebServer {
 
 void begin() {
-    if (!LittleFS.begin(false)) {
+    if (!LittleFS.begin(false, "/littlefs", 10, LITTLEFS_PARTITION_LABEL)) {
         Serial.println("LittleFS mount failed; web server not started");
         return;
     }

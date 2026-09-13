@@ -130,7 +130,7 @@ const char* toString(StopReason reason) {
 void begin() {
     g_ready = false;
     if (g_mutex == nullptr) g_mutex = xSemaphoreCreateMutex();
-    if (!LittleFS.begin(false)) return;
+    if (!LittleFS.begin(false, "/littlefs", 10, LITTLEFS_PARTITION_LABEL)) return;
     if (!lock()) return;
 
     bool needFresh = true;
