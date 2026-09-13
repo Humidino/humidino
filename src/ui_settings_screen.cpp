@@ -24,6 +24,8 @@ enum RowIndex {
     kMinRuntimeMin,
     kMinPauseMin,
     kMaxRuntimeMin,
+    kQuietHoursStart,
+    kQuietHoursEnd,
     kRowCount
 };
 
@@ -46,6 +48,7 @@ struct CounterRow {
 CounterRow g_rows[kRowCount];
 lv_obj_t* g_seasonAutoSwitch;
 lv_obj_t* g_seasonNowLabel;
+lv_obj_t* g_quietHoursSwitch;
 lv_obj_t* g_savedFlash;
 lv_timer_t* g_flashTimer = nullptr;
 
@@ -217,6 +220,9 @@ void onSaveClicked(lv_event_t*) {
     settings.minRuntimeMs = static_cast<uint32_t>(g_rows[kMinRuntimeMin].value) * 60000UL;
     settings.minPauseMs = static_cast<uint32_t>(g_rows[kMinPauseMin].value) * 60000UL;
     settings.maxRuntimeMs = static_cast<uint32_t>(g_rows[kMaxRuntimeMin].value) * 60000UL;
+    settings.quietHoursEnabled = lv_obj_has_state(g_quietHoursSwitch, LV_STATE_CHECKED);
+    settings.quietHoursStartHour = static_cast<uint8_t>(g_rows[kQuietHoursStart].value);
+    settings.quietHoursEndHour = static_cast<uint8_t>(g_rows[kQuietHoursEnd].value);
     settings.seasonAutoEnabled = lv_obj_has_state(g_seasonAutoSwitch, LV_STATE_CHECKED);
 
     // Включили автосезон этим же сохранением — подставляем профиль текущего
@@ -258,6 +264,29 @@ void build(lv_obj_t* parent) {
     // шаг 10 — независимая защита, не входит в сезонные профили/пресеты
     // (см. RuntimeSettings::maxRuntimeMs в shared_state.h).
     buildRow(parent, kMaxRuntimeMin, "Макс. время работы, мин", 0, 720, 10, false);
+
+    // --- Тихие часы: принудительная пауза по расписанию, не зависит от ---
+    // влажности (см. RuntimeSettings::quietHoursEnabled в shared_state.h).
+    // Часы локальные, окно поддерживает переход через полночь (например,
+    // "с 22 до 7"). Требует синхронизации времени по NTP — без неё не
+    // действует, см. isWithinQuietHours() в relay.cpp.
+    lv_obj_t* quietRow = lv_obj_create(parent);
+    lv_obj_set_size(quietRow, LV_PCT(100), 40);
+    lv_obj_set_flex_flow(quietRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(quietRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_border_width(quietRow, 0, 0);
+    lv_obj_set_style_pad_all(quietRow, 2, 0);
+
+    lv_obj_t* quietLbl = lv_label_create(quietRow);
+    lv_obj_set_style_text_font(quietLbl, &font_ru_14, 0);
+    lv_label_set_text(quietLbl, "Тихие часы (не работать ночью)");
+    lv_obj_set_flex_grow(quietLbl, 1);
+
+    g_quietHoursSwitch = lv_switch_create(quietRow);
+
+    // Час 0-23, шаг 1.
+    buildRow(parent, kQuietHoursStart, "Тихие часы: с, ч", 0, 23, 1, false);
+    buildRow(parent, kQuietHoursEnd, "Тихие часы: до, ч", 0, 23, 1, false);
 
     // --- Автосезон: подставляет пороги/тайминги выше сама, по календарю ---
     // (профили под климат Лотошино, МО — см. docs/SEASONAL_LOTOSHINO.md).
@@ -349,7 +378,12 @@ void refresh() {
     g_rows[kMinRuntimeMin].value = static_cast<int32_t>(settings.minRuntimeMs / 60000UL);
     g_rows[kMinPauseMin].value = static_cast<int32_t>(settings.minPauseMs / 60000UL);
     g_rows[kMaxRuntimeMin].value = static_cast<int32_t>(settings.maxRuntimeMs / 60000UL);
+    g_rows[kQuietHoursStart].value = static_cast<int32_t>(settings.quietHoursStartHour);
+    g_rows[kQuietHoursEnd].value = static_cast<int32_t>(settings.quietHoursEndHour);
     for (int i = 0; i < kRowCount; ++i) updateRowLabel(static_cast<RowIndex>(i));
+
+    if (settings.quietHoursEnabled) lv_obj_add_state(g_quietHoursSwitch, LV_STATE_CHECKED);
+    else lv_obj_remove_state(g_quietHoursSwitch, LV_STATE_CHECKED);
 
     if (settings.seasonAutoEnabled) lv_obj_add_state(g_seasonAutoSwitch, LV_STATE_CHECKED);
     else lv_obj_remove_state(g_seasonAutoSwitch, LV_STATE_CHECKED);

@@ -31,6 +31,7 @@
     min_pause_hold: "Пауза между запусками",
     locked_sensor_fault: "Ошибка датчиков",
     locked_max_runtime: "Пауза: превышено макс. время работы",
+    locked_quiet_hours: "Пауза: тихие часы",
   };
   const BANNER_EXPLANATION = {
     idle: "Влажность в норме, вентиляция не требуется.",
@@ -44,6 +45,7 @@
     locked_sensor_fault: "Не хватает исправных датчиков для безопасного автоматического решения.",
     locked_max_runtime:
       "Вентилятор проработал непрерывно дольше заданного аварийного потолка и был принудительно остановлен.",
+    locked_quiet_hours: "Сейчас тихие часы — вентиляция приостановлена по расписанию, независимо от влажности.",
   };
   const MODE_TEXT = { auto: "АВТО", manual_on: "РУЧНОЕ ВКЛ", manual_off: "РУЧНОЕ ВЫКЛ" };
   const SEASON_TEXT = { winter: "Зима", spring: "Весна", summer: "Лето", autumn: "Осень" };
@@ -292,7 +294,16 @@
 
   // --- Настройки ---
 
-  const FIELD_IDS = ["rh_target", "hysteresis_pct", "freeze_c", "min_runtime_min", "min_pause_min", "max_runtime_min"];
+  const FIELD_IDS = [
+    "rh_target",
+    "hysteresis_pct",
+    "freeze_c",
+    "min_runtime_min",
+    "min_pause_min",
+    "max_runtime_min",
+    "quiet_hours_start",
+    "quiet_hours_end",
+  ];
 
   function msToMin(ms) {
     return Math.round(ms / 60000);
@@ -305,6 +316,9 @@
     qs("min_runtime_min").value = msToMin(s.min_runtime_ms);
     qs("min_pause_min").value = msToMin(s.min_pause_ms);
     qs("max_runtime_min").value = msToMin(s.max_runtime_ms);
+    qs("quiet_hours_enabled").checked = !!s.quiet_hours_enabled;
+    qs("quiet_hours_start").value = s.quiet_hours_start;
+    qs("quiet_hours_end").value = s.quiet_hours_end;
     qs("season_auto").checked = !!s.season_auto;
     updateDirtyBadge();
     updateRulePreview();
@@ -324,6 +338,9 @@
       min_runtime_ms: Math.round(parseFloat(qs("min_runtime_min").value || "0") * 60000),
       min_pause_ms: Math.round(parseFloat(qs("min_pause_min").value || "0") * 60000),
       max_runtime_ms: Math.round(parseFloat(qs("max_runtime_min").value || "0") * 60000),
+      quiet_hours_enabled: qs("quiet_hours_enabled").checked,
+      quiet_hours_start: parseInt(qs("quiet_hours_start").value || "0", 10),
+      quiet_hours_end: parseInt(qs("quiet_hours_end").value || "0", 10),
     };
   }
 
@@ -336,7 +353,10 @@
       v.freeze_c !== lastSettings.freeze_c ||
       v.min_runtime_ms !== lastSettings.min_runtime_ms ||
       v.min_pause_ms !== lastSettings.min_pause_ms ||
-      v.max_runtime_ms !== lastSettings.max_runtime_ms;
+      v.max_runtime_ms !== lastSettings.max_runtime_ms ||
+      v.quiet_hours_enabled !== !!lastSettings.quiet_hours_enabled ||
+      v.quiet_hours_start !== lastSettings.quiet_hours_start ||
+      v.quiet_hours_end !== lastSettings.quiet_hours_end;
     qs("dirtyBadge").hidden = !dirty;
   }
 
@@ -369,6 +389,8 @@
       updateRulePreview();
     });
   });
+
+  qs("quiet_hours_enabled").addEventListener("change", updateDirtyBadge);
 
   async function loadSettings() {
     try {

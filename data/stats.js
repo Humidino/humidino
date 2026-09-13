@@ -18,6 +18,7 @@
     sensor_fault: "Прервано: ошибка датчика",
     interrupted: "Прервано перезагрузкой устройства",
     max_runtime_exceeded: "Прервано: максимальное время работы",
+    quiet_hours: "Прервано: тихие часы",
     unknown: "Работает сейчас",
   };
 
@@ -29,6 +30,7 @@
     sensor_fault: "protection",
     interrupted: "interrupted",
     max_runtime_exceeded: "protection",
+    quiet_hours: "protection",
   };
 
   let deviceTzOffsetSec = 0;

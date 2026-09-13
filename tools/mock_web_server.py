@@ -37,6 +37,7 @@ LOCAL_TZ_OFFSET_SEC = 3 * 3600
 RELAY_STATE_CYCLE = [
     "idle", "running", "locked_condensation", "locked_freeze",
     "min_pause_hold", "locked_sensor_fault", "locked_max_runtime",
+    "locked_quiet_hours",
 ]
 STATE_HOLD_SECONDS = 8  # держим каждое состояние N секунд, чтобы увидеть все баннеры
 mock_cycle_count = 12
@@ -50,6 +51,9 @@ settings = {
     "min_runtime_ms": 10 * 60 * 1000,
     "min_pause_ms": 15 * 60 * 1000,
     "max_runtime_ms": 60 * 60 * 1000,
+    "quiet_hours_enabled": True,
+    "quiet_hours_start": 22,
+    "quiet_hours_end": 7,
     "mode": "auto",
     "season_auto": True,
 }
@@ -81,7 +85,7 @@ presets = [
 # Правдоподобная, но не настоящая история циклов реле за последние ~10 дней —
 # только чтобы потестировать вёрстку графика и таблицы /api/history без
 # реального устройства (см. README §5.1).
-STOP_REASONS = ["hysteresis_reached"] * 6 + ["locked_freeze", "locked_condensation", "manual_off", "max_runtime_exceeded"]
+STOP_REASONS = ["hysteresis_reached"] * 6 + ["locked_freeze", "locked_condensation", "manual_off", "max_runtime_exceeded", "quiet_hours"]
 
 
 def build_fake_history():

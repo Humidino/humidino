@@ -27,6 +27,7 @@ enum class StopReason : uint8_t {
     // LittleFS (RunRecord пишется как raw struct, см. run_log.cpp) не должны
     // сдвигаться.
     MaxRuntimeExceeded,          // прервано защитой по максимальному времени непрерывной работы
+    QuietHours,                   // прервано наступлением "тихих часов" по расписанию
 };
 
 // Машиночитаемый идентификатор для JSON-API (по аналогии с

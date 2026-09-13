@@ -98,6 +98,12 @@
               <div class="field"><label for="min_pause_min">Пауза между запусками, мин</label><input type="number" id="min_pause_min" required min="0" max="1440" step="any"><p>Защищает от слишком частых включений в авторежиме.</p></div>
               <div class="field"><label for="max_runtime_min">Макс. время непрерывной работы, мин</label><input type="number" id="max_runtime_min" required min="0" max="1440" step="1"><p>Аварийный потолок — выключает вентилятор даже в ручном режиме «Включить», если он проработал дольше этого времени. 0 = без ограничения.</p></div>
             </div>
+            <div class="settings-divider"></div><h2>Тихие часы</h2>
+            <div class="season-setting"><div><label for="quiet_hours_enabled">Не работать в тихие часы (например, ночью)</label><p>В эти часы вентиляция не запускается и останавливается, даже если влажность выше порога. Действует только в режиме «Авто» и требует синхронизации времени устройства с интернетом (NTP).</p></div><input type="checkbox" id="quiet_hours_enabled" role="switch"></div>
+            <div class="fields-grid">
+              <div class="field"><label for="quiet_hours_start">С, час</label><input type="number" id="quiet_hours_start" required min="0" max="23" step="1"><p>Локальное время устройства.</p></div>
+              <div class="field"><label for="quiet_hours_end">До, час</label><input type="number" id="quiet_hours_end" required min="0" max="23" step="1"><p>Если «до» меньше «с» — окно переходит через полночь.</p></div>
+            </div>
             <div class="season-setting"><div><label for="season_auto">Подстраивать настройки под сезон</label><p>Профили для Лотошино, Московская область. При включении применятся сезонные значения. Ручные изменения действуют до следующей смены сезона.</p></div><input type="checkbox" id="season_auto" role="switch"></div>
             <div class="form-footer"><button type="submit" class="button primary" id="saveSettings">Сохранить настройки</button><button type="button" class="button" id="resetSettings">Отменить изменения</button><span id="saveStatus" class="micro" role="status"></span></div>
           </fieldset>

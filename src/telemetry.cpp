@@ -64,6 +64,9 @@ void buildSettingsJson(JsonDocument& doc) {
     doc["min_runtime_ms"] = settings.minRuntimeMs;
     doc["min_pause_ms"] = settings.minPauseMs;
     doc["max_runtime_ms"] = settings.maxRuntimeMs;
+    doc["quiet_hours_enabled"] = settings.quietHoursEnabled;
+    doc["quiet_hours_start"] = settings.quietHoursStartHour;
+    doc["quiet_hours_end"] = settings.quietHoursEndHour;
     doc["mode"] = toString(settings.mode);
     doc["season_auto"] = settings.seasonAutoEnabled;
 }

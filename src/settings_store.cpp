@@ -26,6 +26,9 @@ RuntimeSettings loadUnlocked() {
     s.minRuntimeMs = g_prefs.getULong("min_run_ms", MIN_RUNTIME_MS);
     s.minPauseMs = g_prefs.getULong("min_pause_ms", MIN_PAUSE_MS);
     s.maxRuntimeMs = g_prefs.getULong("max_run_ms", MAX_RUNTIME_MS);
+    s.quietHoursEnabled = g_prefs.getBool("quiet_en", DEFAULT_QUIET_HOURS_ENABLED);
+    s.quietHoursStartHour = g_prefs.getUChar("quiet_start", DEFAULT_QUIET_HOURS_START_HOUR);
+    s.quietHoursEndHour = g_prefs.getUChar("quiet_end", DEFAULT_QUIET_HOURS_END_HOUR);
     String modeStr = g_prefs.getString("mode", toString(OperatingMode::Auto));
     s.mode = operatingModeFromString(modeStr.c_str());
     s.seasonAutoEnabled = g_prefs.getBool("season_auto", true);
@@ -64,6 +67,12 @@ void save(const RuntimeSettings& settings) {
         g_prefs.putULong("min_pause_ms", settings.minPauseMs);
     if (current.maxRuntimeMs != settings.maxRuntimeMs)
         g_prefs.putULong("max_run_ms", settings.maxRuntimeMs);
+    if (current.quietHoursEnabled != settings.quietHoursEnabled)
+        g_prefs.putBool("quiet_en", settings.quietHoursEnabled);
+    if (current.quietHoursStartHour != settings.quietHoursStartHour)
+        g_prefs.putUChar("quiet_start", settings.quietHoursStartHour);
+    if (current.quietHoursEndHour != settings.quietHoursEndHour)
+        g_prefs.putUChar("quiet_end", settings.quietHoursEndHour);
     if (current.mode != settings.mode)
         g_prefs.putString("mode", toString(settings.mode));
     if (current.seasonAutoEnabled != settings.seasonAutoEnabled)

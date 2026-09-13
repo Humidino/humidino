@@ -119,6 +119,8 @@ const char* toString(StopReason reason) {
             return "interrupted";
         case StopReason::MaxRuntimeExceeded:
             return "max_runtime_exceeded";
+        case StopReason::QuietHours:
+            return "quiet_hours";
         case StopReason::Unknown:
         default:
             return "unknown";

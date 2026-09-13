@@ -108,6 +108,14 @@ constexpr float DEFAULT_RH_TARGET_PERCENT   = 70.0f;  // % — порог вла
 constexpr float DEFAULT_HYSTERESIS_PERCENT  = 5.0f;   // % — гистерезис по влажности
 constexpr float FREEZE_PROTECT_TEMP_C       = 2.0f;   // °C — защита от замерзания
 
+// "Тихие часы" — по умолчанию выключены (пользователь включает осознанно).
+// Часы локальные (см. LOCAL_TZ_OFFSET_SEC ниже), 0-23, окно [start, end) с
+// поддержкой перехода через полночь (start > end). Требует NTP-синхронизации
+// времени — см. isWithinQuietHours() в relay.cpp.
+constexpr bool    DEFAULT_QUIET_HOURS_ENABLED    = false;
+constexpr uint8_t DEFAULT_QUIET_HOURS_START_HOUR = 22;  // 22:00
+constexpr uint8_t DEFAULT_QUIET_HOURS_END_HOUR   = 7;   // 07:00
+
 constexpr uint32_t WDT_TIMEOUT_S            = 8;  // с — таймаут аппаратного watchdog
 
 constexpr uint32_t BACKLIGHT_DIM_TIMEOUT_MS = 5UL * 60 * 1000;  // 5 мин бездействия до гашения

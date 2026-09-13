@@ -259,6 +259,7 @@ const char* bannerTextFor(const RelayStatus& status) {
         case RelayControlState::LockedOutCondensation: return "ВЫКЛ: риск конденсата";
         case RelayControlState::MinPauseHold: return "ВЫКЛ: минимальная пауза";
         case RelayControlState::LockedOutMaxRuntime: return "ВЫКЛ: макс. время работы";
+        case RelayControlState::LockedOutQuietHours: return "ВЫКЛ: тихие часы";
         default: return "ВЕНТИЛЯТОР: ВЫКЛ";
     }
 }
