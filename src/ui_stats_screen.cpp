@@ -8,6 +8,7 @@
 #include "config.h"
 #include "fonts/fonts.h"
 #include "run_log.h"
+#include "time_sync.h"
 
 namespace {
 
@@ -20,6 +21,7 @@ namespace {
 // проверено на реальном железе, поэтому лучше не приближаться к пределу.
 constexpr size_t kMaxRowsShown = 10;
 
+lv_obj_t* g_clockLabel;
 lv_obj_t* g_summaryLabel;
 lv_obj_t* g_totalLabel;
 lv_obj_t* g_timeWarningLabel;
@@ -42,6 +44,18 @@ void formatClock(char* out, size_t outSize, uint32_t epoch) {
     struct tm tmv;
     gmtime_r(&local, &tmv);
     snprintf(out, outSize, "%02d:%02d %02d.%02d", tmv.tm_hour, tmv.tm_min, tmv.tm_mday, tmv.tm_mon + 1);
+}
+
+void formatNow(char* out, size_t outSize) {
+    if (!TimeSync::isSynced()) {
+        snprintf(out, outSize, "--.--.---- --:--:--");
+        return;
+    }
+    time_t local = static_cast<time_t>(TimeSync::nowEpoch()) + LOCAL_TZ_OFFSET_SEC;
+    struct tm tmv;
+    gmtime_r(&local, &tmv);
+    snprintf(out, outSize, "%02d.%02d.%04d %02d:%02d:%02d", tmv.tm_mday, tmv.tm_mon + 1, tmv.tm_year + 1900,
+             tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
 }
 
 void formatDuration(char* out, size_t outSize, uint32_t ms) {
@@ -184,6 +198,11 @@ void build(lv_obj_t* parent) {
     lv_obj_set_style_text_color(title, lv_color_hex(0xF0F0F0), 0);
     lv_label_set_text(title, "Статистика");
 
+    g_clockLabel = lv_label_create(parent);
+    lv_obj_set_style_text_font(g_clockLabel, &font_ru_14, 0);
+    lv_obj_set_style_text_color(g_clockLabel, lv_color_hex(0x8AA0B8), 0);
+    lv_label_set_text(g_clockLabel, "--");
+
     g_summaryLabel = lv_label_create(parent);
     lv_obj_set_style_text_font(g_summaryLabel, &font_ru_14, 0);
     lv_obj_set_style_text_color(g_summaryLabel, lv_color_hex(0xF0F0F0), 0);
@@ -224,6 +243,9 @@ void refresh() {
     RunLog::Summary sum = RunLog::getSummary();
 
     char buf[64];
+    formatNow(buf, sizeof(buf));
+    lv_label_set_text(g_clockLabel, buf);
+
     if (sum.timeSynced) {
         char durBuf[24];
         formatDuration(durBuf, sizeof(durBuf), sum.runtimeTodayMs);
