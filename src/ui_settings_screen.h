@@ -15,4 +15,8 @@ void build(lv_obj_t* parent);
 // значение, которое пользователь ещё не успел сохранить.
 void refresh();
 
+// Отменяет ожидающее подтверждение сброса Wi-Fi при уходе с вкладки,
+// чтобы повторное касание после возвращения не выполнило сброс.
+void cancelWifiResetConfirm();
+
 }  // namespace UiSettingsScreen

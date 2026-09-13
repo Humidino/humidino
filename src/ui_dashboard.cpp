@@ -415,7 +415,7 @@ void update() {
     setLabelTextIfChanged(g_uptimeLabel, buf);
 
     if (snapshot.wifiConnected) {
-        snprintf(buf, sizeof(buf), "WiFi: %d дБм", snapshot.wifiRssi);
+        snprintf(buf, sizeof(buf), "WiFi: %d дБм %s", snapshot.wifiRssi, snapshot.wifiIp);
     } else {
         snprintf(buf, sizeof(buf), "WiFi: --");
     }

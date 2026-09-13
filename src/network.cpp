@@ -27,7 +27,12 @@ void netTask(void*) {
 
     for (;;) {
         bool connected = (WiFi.status() == WL_CONNECTED);
-        ShaState::updateWifi(connected, connected ? static_cast<int8_t>(WiFi.RSSI()) : 0);
+        if (connected) {
+            String ip = WiFi.localIP().toString();
+            ShaState::updateWifi(true, static_cast<int8_t>(WiFi.RSSI()), ip.c_str());
+        } else {
+            ShaState::updateWifi(false, 0);
+        }
 
         Watchdog::feed();
         vTaskDelay(pdMS_TO_TICKS(200));
