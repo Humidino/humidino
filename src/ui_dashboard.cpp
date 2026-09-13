@@ -3,7 +3,6 @@
 #include <Arduino.h>
 #include <cmath>
 #include <cstring>
-#include <esp_heap_caps.h>
 #include <lvgl.h>
 
 #include "config.h"
@@ -48,7 +47,6 @@ struct ZonePanelWidgets {
 
 lv_obj_t* g_uptimeLabel;
 lv_obj_t* g_wifiLabel;
-lv_obj_t* g_ramLabel;
 lv_obj_t* g_modeLabel;
 lv_obj_t* g_seasonLabel;
 lv_obj_t* g_banner;
@@ -307,10 +305,6 @@ void build(lv_obj_t* parent) {
     lv_obj_set_style_text_font(g_wifiLabel, &font_ru_14, 0);
     setLabelTextIfChanged(g_wifiLabel, "WiFi: --");
 
-    g_ramLabel = lv_label_create(statusBar);
-    lv_obj_set_style_text_font(g_ramLabel, &font_ru_14, 0);
-    setLabelTextIfChanged(g_ramLabel, "ОЗУ: --");
-
     g_modeLabel = lv_label_create(statusBar);
     lv_obj_set_style_text_font(g_modeLabel, &font_ru_14, 0);
     lv_obj_set_style_text_color(g_modeLabel, lv_color_hex(0x8AA0B8), 0);
@@ -421,10 +415,6 @@ void update() {
         snprintf(buf, sizeof(buf), "WiFi: --");
     }
     setLabelTextIfChanged(g_wifiLabel, buf);
-
-    size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-    snprintf(buf, sizeof(buf), "ОЗУ: %u КБ", static_cast<unsigned>(freeHeap / 1024));
-    setLabelTextIfChanged(g_ramLabel, buf);
 
     setLabelTextIfChanged(g_modeLabel, Relay::modeBadgeText(snapshot.settings.mode));
     if (snapshot.settings.seasonAutoEnabled) {
